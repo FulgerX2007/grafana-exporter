@@ -1,0 +1,194 @@
+stages:
+  - build
+  - package
+  - release
+
+variables:
+  PACKAGE_NAME: dna-dashboard-exporter
+  VERSION: ${CI_COMMIT_TAG}
+  GO_VERSION: "1.20"
+  GOOS_LINUX: "linux"
+  GOOS_WINDOWS: "windows"
+  GOARCH_AMD64: "amd64"
+  GOARCH_ARM64: "arm64"
+
+# Build stage jobs
+build:linux-amd64:
+  stage: build
+  image: golang:${GO_VERSION}
+  script:
+    - go mod download
+    - GOOS=${GOOS_LINUX} GOARCH=${GOARCH_AMD64} go build -ldflags="-X 'main.Version=${VERSION}'" -o ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_AMD64}
+  artifacts:
+    paths:
+      - ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_AMD64}
+    expire_in: 1 week
+
+build:linux-arm64:
+  stage: build
+  image: golang:${GO_VERSION}
+  script:
+    - go mod download
+    - GOOS=${GOOS_LINUX} GOARCH=${GOARCH_ARM64} go build -ldflags="-X 'main.Version=${VERSION}'" -o ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_ARM64}
+  artifacts:
+    paths:
+      - ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_ARM64}
+    expire_in: 1 week
+
+build:windows-amd64:
+  stage: build
+  image: golang:${GO_VERSION}
+  script:
+    - go mod download
+    - GOOS=${GOOS_WINDOWS} GOARCH=${GOARCH_AMD64} go build -ldflags="-X 'main.Version=${VERSION}'" -o ${PACKAGE_NAME}-${GOOS_WINDOWS}-${GOARCH_AMD64}.exe
+  artifacts:
+    paths:
+      - ${PACKAGE_NAME}-${GOOS_WINDOWS}-${GOARCH_AMD64}.exe
+    expire_in: 1 week
+
+# Package stage jobs
+package:rpm:
+  stage: package
+  image: fedora:latest
+  dependencies:
+    - build:linux-amd64
+  script:
+    - dnf install -y rpm-build rpmdevtools
+    - mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+    - mkdir -p tmp_build/${PACKAGE_NAME}-${VERSION}/{usr/bin,usr/share/${PACKAGE_NAME}/{public,logos},etc/${PACKAGE_NAME}}
+    - cp ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_AMD64} tmp_build/${PACKAGE_NAME}-${VERSION}/usr/bin/${PACKAGE_NAME}
+    - cp -r public/* tmp_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/public/ || echo "No public directory"
+    - cp -r logos/* tmp_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/logos/ || echo "No logos directory"
+    - cp *.sh tmp_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/ || echo "No shell scripts"
+    - cp .env.example tmp_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/.env
+    - cp grafana.ini tmp_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/ || echo "No grafana.ini"
+    - cd tmp_build
+    - tar -czvf ${PACKAGE_NAME}-${VERSION}.tar.gz ${PACKAGE_NAME}-${VERSION}
+    - cp ${PACKAGE_NAME}-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+    - |
+      cat > ~/rpmbuild/SPECS/${PACKAGE_NAME}.spec << EOF
+      %define _binaries_in_noarch_packages_terminate_build 0
+      
+      Name:           ${PACKAGE_NAME}
+      Version:        ${VERSION}
+      Release:        1%{?dist}
+      Summary:        DNA Dashboard Exporter Tool
+      
+      License:        MIT
+      Source0:        ${PACKAGE_NAME}-${VERSION}.tar.gz
+      
+      %description
+      A tool for exporting DNA dashboards and their linked libraries.
+      
+      %prep
+      %setup -q
+      
+      %install
+      mkdir -p %{buildroot}
+      cp -r * %{buildroot}
+      
+      %files
+      %defattr(-,root,root,-)
+      /usr/bin/${PACKAGE_NAME}
+      /usr/share/${PACKAGE_NAME}
+      %config(noreplace) /etc/${PACKAGE_NAME}
+      
+      %changelog
+      * $(date '+%a %b %d %Y') GitLab CI <ci@example.com> - ${VERSION}-1
+      - Automated RPM build from GitLab CI
+      EOF
+    - rpmbuild -ba ~/rpmbuild/SPECS/${PACKAGE_NAME}.spec
+    - cp ~/rpmbuild/RPMS/*/dna-dashboard-exporter-${VERSION}*.rpm ./
+    - mv *.rpm ..
+  artifacts:
+    paths:
+      - "*.rpm"
+    expire_in: 1 week
+
+package:deb:
+  stage: package
+  image: ubuntu:latest
+  dependencies:
+    - build:linux-amd64
+  script:
+    - apt-get update
+    - apt-get install -y build-essential debhelper dh-make fakeroot
+    - mkdir -p deb_build/${PACKAGE_NAME}-${VERSION}/{DEBIAN,usr/bin,usr/share/${PACKAGE_NAME}/{public,logos},etc/${PACKAGE_NAME}}
+    - |
+      cat > deb_build/${PACKAGE_NAME}-${VERSION}/DEBIAN/control << EOF
+      Package: ${PACKAGE_NAME}
+      Version: ${VERSION}
+      Section: utils
+      Priority: optional
+      Architecture: amd64
+      Maintainer: GitLab CI <ci@example.com>
+      Description: DNA Dashboard Exporter Tool
+       A tool for exporting DNA dashboards and their linked libraries.
+      EOF
+    - cp ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_AMD64} deb_build/${PACKAGE_NAME}-${VERSION}/usr/bin/${PACKAGE_NAME}
+    - cp -r public/* deb_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/public/ || echo "No public directory"
+    - cp -r logos/* deb_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/logos/ || echo "No logos directory"
+    - cp *.sh deb_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/ || echo "No shell scripts"
+    - cp .env.example deb_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/.env
+    - cp grafana.ini deb_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/ || echo "No grafana.ini"
+    - chmod 755 deb_build/${PACKAGE_NAME}-${VERSION}/DEBIAN/control
+    - cd deb_build && dpkg-deb --build ${PACKAGE_NAME}-${VERSION}
+    - cp ${PACKAGE_NAME}-${VERSION}.deb ../
+  artifacts:
+    paths:
+      - "*.deb"
+    expire_in: 1 week
+
+# Release stage
+release:packages:
+  stage: release
+  image: curlimages/curl:latest
+  dependencies:
+    - build:linux-amd64
+    - build:linux-arm64
+    - build:windows-amd64
+    - package:rpm
+    - package:deb
+  script:
+    - |
+      for file in ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_AMD64} ${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_ARM64} ${PACKAGE_NAME}-${GOOS_WINDOWS}-${GOARCH_AMD64}.exe *.rpm *.deb; do
+        echo "Uploading $file to package registry..."
+        curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "$file" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/$file"
+      done
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+release:gitlab:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  dependencies:
+    - build:linux-amd64
+    - build:linux-arm64
+    - build:windows-amd64
+    - package:rpm
+    - package:deb
+  script:
+    - echo "Creating release ${VERSION}..."
+  release:
+    name: 'Release ${VERSION}'
+    tag_name: 'v${VERSION}'
+    description: 'Release ${VERSION} generated by GitLab CI pipeline ${CI_PIPELINE_ID}'
+    assets:
+      links:
+        - name: 'Linux AMD64 Binary'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_AMD64}'
+          link_type: 'package'
+        - name: 'Linux ARM64 Binary'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${PACKAGE_NAME}-${GOOS_LINUX}-${GOARCH_ARM64}'
+          link_type: 'package'
+        - name: 'Windows AMD64 Executable'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${PACKAGE_NAME}-${GOOS_WINDOWS}-${GOARCH_AMD64}.exe'
+          link_type: 'package'
+        - name: 'RPM Package'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${PACKAGE_NAME}-${VERSION}-1.x86_64.rpm'
+          link_type: 'package'
+        - name: 'DEB Package'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${PACKAGE_NAME}-${VERSION}.deb'
+          link_type: 'package'
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
