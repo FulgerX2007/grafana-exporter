@@ -1,0 +1,214 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PACKAGE_NAME: grafana-exporter
+  GO_VERSION: "1.23"
+
+jobs:
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=1.0.${GITHUB_RUN_NUMBER}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Linux AMD64
+        run: |
+          GOOS=linux GOARCH=amd64 go build -ldflags="-X 'main.Version=${{ steps.get_version.outputs.version }}'" -o ${{ env.PACKAGE_NAME }}-linux-amd64
+
+      - name: Build Linux ARM64
+        run: |
+          GOOS=linux GOARCH=arm64 go build -ldflags="-X 'main.Version=${{ steps.get_version.outputs.version }}'" -o ${{ env.PACKAGE_NAME }}-linux-arm64
+
+      - name: Build Windows AMD64
+        run: |
+          GOOS=windows GOARCH=amd64 go build -ldflags="-X 'main.Version=${{ steps.get_version.outputs.version }}'" -o ${{ env.PACKAGE_NAME }}-windows-amd64.exe
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: |
+            ${{ env.PACKAGE_NAME }}-linux-amd64
+            ${{ env.PACKAGE_NAME }}-linux-arm64
+            ${{ env.PACKAGE_NAME }}-windows-amd64.exe
+
+  package-rpm:
+    name: Create RPM Package
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+
+      - name: Set up RPM build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+
+      - name: Prepare RPM structure
+        run: |
+          VERSION=${{ needs.build.outputs.version }}
+          mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+          mkdir -p tmp_build/${PACKAGE_NAME}-${VERSION}/{usr/bin,usr/share/${PACKAGE_NAME}/{public,logos},etc/${PACKAGE_NAME}}
+          cp ${PACKAGE_NAME}-linux-amd64 tmp_build/${PACKAGE_NAME}-${VERSION}/usr/bin/${PACKAGE_NAME}
+          cp -r public/* tmp_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/public/ || echo "No public directory"
+          cp -r logos/* tmp_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/logos/ || echo "No logos directory"
+          cp *.sh tmp_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/ || echo "No shell scripts"
+          cp .env.example tmp_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/.env || echo "No .env.example"
+          cp grafana.ini tmp_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/ || echo "No grafana.ini"
+          cd tmp_build
+          tar -czvf ${PACKAGE_NAME}-${VERSION}.tar.gz ${PACKAGE_NAME}-${VERSION}
+          cp ${PACKAGE_NAME}-${VERSION}.tar.gz ../rpmbuild/SOURCES/
+
+      - name: Create RPM spec file
+        run: |
+          VERSION=${{ needs.build.outputs.version }}
+          cat > rpmbuild/SPECS/${PACKAGE_NAME}.spec << EOF
+          %define _binaries_in_noarch_packages_terminate_build 0
+          
+          Name:           ${PACKAGE_NAME}
+          Version:        ${VERSION}
+          Release:        1%{?dist}
+          Summary:        Grafana Dashboard Exporter Tool
+          
+          License:        MIT
+          Source0:        ${PACKAGE_NAME}-${VERSION}.tar.gz
+          
+          %description
+          A tool for exporting Grafana dashboards and their linked libraries.
+          
+          %prep
+          %setup -q
+          
+          %install
+          mkdir -p %{buildroot}
+          cp -r * %{buildroot}
+          
+          %files
+          %defattr(-,root,root,-)
+          /usr/bin/${PACKAGE_NAME}
+          /usr/share/${PACKAGE_NAME}
+          %config(noreplace) /etc/${PACKAGE_NAME}
+          
+          %changelog
+          * $(date '+%a %b %d %Y') GitHub Actions <actions@github.com> - ${VERSION}-1
+          - Automated RPM build from GitHub Actions
+          EOF
+
+      - name: Build RPM
+        run: |
+          rpmbuild --define "_topdir $(pwd)/rpmbuild" -ba rpmbuild/SPECS/${PACKAGE_NAME}.spec
+          cp rpmbuild/RPMS/*/${PACKAGE_NAME}-*.rpm ./
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-package
+          path: '*.rpm'
+
+  package-deb:
+    name: Create DEB Package
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+
+      - name: Prepare DEB structure
+        run: |
+          VERSION=${{ needs.build.outputs.version }}
+          mkdir -p deb_build/${PACKAGE_NAME}-${VERSION}/{DEBIAN,usr/bin,usr/share/${PACKAGE_NAME}/{public,logos},etc/${PACKAGE_NAME}}
+          
+          cat > deb_build/${PACKAGE_NAME}-${VERSION}/DEBIAN/control << EOF
+          Package: ${PACKAGE_NAME}
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: GitHub Actions <actions@github.com>
+          Description: Grafana Dashboard Exporter Tool
+           A tool for exporting Grafana dashboards and their linked libraries.
+          EOF
+          
+          cp ${PACKAGE_NAME}-linux-amd64 deb_build/${PACKAGE_NAME}-${VERSION}/usr/bin/${PACKAGE_NAME}
+          cp -r public/* deb_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/public/ || echo "No public directory"
+          cp -r logos/* deb_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/logos/ || echo "No logos directory"
+          cp *.sh deb_build/${PACKAGE_NAME}-${VERSION}/usr/share/${PACKAGE_NAME}/ || echo "No shell scripts"
+          cp .env.example deb_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/.env || echo "No .env.example"
+          cp grafana.ini deb_build/${PACKAGE_NAME}-${VERSION}/etc/${PACKAGE_NAME}/ || echo "No grafana.ini"
+          chmod 755 deb_build/${PACKAGE_NAME}-${VERSION}/DEBIAN/control
+
+      - name: Build DEB
+        run: |
+          VERSION=${{ needs.build.outputs.version }}
+          cd deb_build && dpkg-deb --build ${PACKAGE_NAME}-${VERSION}
+          cp ${PACKAGE_NAME}-${VERSION}.deb ../
+
+      - name: Upload DEB package
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: '*.deb'
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [build, package-rpm, package-deb]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: List artifacts
+        run: find . -type f | sort
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ needs.build.outputs.version }}
+          tag_name: v${{ needs.build.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            binaries/${{ env.PACKAGE_NAME }}-linux-amd64
+            binaries/${{ env.PACKAGE_NAME }}-linux-arm64
+            binaries/${{ env.PACKAGE_NAME }}-windows-amd64.exe
+            rpm-package/*.rpm
+            deb-package/*.deb
+          body: |
+            Release ${{ needs.build.outputs.version }} generated by GitHub Actions

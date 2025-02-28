@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grafana - Dashboard & Libraries - Exporter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+        .header {
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e5e5e5;
+            margin-bottom: 30px;
+        }
+        .logo {
+            max-height: 50px;
+            margin-right: 15px;
+        }
+        .folder-item {
+            cursor: pointer;
+            padding: 8px 15px;
+            border-radius: 4px;
+        }
+        .folder-item:hover {
+            background-color: #f8f9fa;
+        }
+        .selected-folder {
+            background-color: #e9ecef;
+            font-weight: bold;
+        }
+        .dashboard-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+        }
+        .dashboard-item:hover {
+            background-color: #f8f9fa;
+        }
+        .dashboard-item.selected {
+            background-color: #cfe2ff;
+            border-color: #9ec5fe;
+        }
+
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .alert-section {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 400px;
+            z-index: 1000;
+        }.folder-level-badge {
+             font-size: 0.7rem;
+             margin-right: 8px;
+             min-width: 26px;
+             text-align: center;
+         }
+
+        .folder-item {
+            display: flex;
+            align-items: center;
+        }
+
+        .folder-title {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+        }
+
+        /* Different colors for different levels */
+        .level-1 {
+            background-color: #6610f2; /* Purple */
+        }
+
+        .level-2 {
+            background-color: #0d6efd; /* Blue */
+        }
+
+        .level-3 {
+            background-color: #198754; /* Green */
+        }
+
+        .level-4 {
+            background-color: #fd7e14; /* Orange */
+        }
+
+        .level-5 {
+            background-color: #dc3545; /* Red */
+        }
+
+        .level-6-plus {
+            background-color: #6c757d; /* Gray for levels 6+ */
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header d-flex align-items-center">
+        <h2>DNA Dashboard Exporter</h2>
+    </div>
+
+    <div class="alert-section" id="alertContainer"></div>
+
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Dashboards</h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-2" id="selectAllBtn">Select All</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="clearSelectionBtn">Clear</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col">
+                            <input type="text" class="form-control" id="searchDashboard" placeholder="Search dashboards...">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="folders-container mb-3">
+                                <h6>Folders</h6>
+                                <div class="list-group" id="foldersList">
+                                    <div class="list-group-item folder-item selected-folder" data-folder-id="all">All Folders</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-9">
+                            <div id="dashboardsContainer" class="dashboards-container">
+                                <div class="text-center py-5 text-muted">
+                                    <div class="spinner-border mb-3" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p>Loading dashboards...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Export Options</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="includeLibrariesCheck" checked>
+                        <label class="form-check-label" for="includeLibrariesCheck">Include linked library panels (automatic)</label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Selected dashboards: <span id="selectedCount">0</span></label>
+                    </div>
+                    <button id="exportBtn" class="btn btn-primary" disabled>Export Selected Dashboards</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4" id="exportResultSection" style="display: none;">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Export Results</h5>
+                </div>
+                <div class="card-body" id="exportResultContent">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="loading" id="loadingOverlay" style="display: none;">
+    <div class="d-flex flex-column align-items-center">
+        <div class="spinner-border mb-3" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p id="loadingText">Processing...</p>
+        <p id="debugInfo" class="small text-muted mt-2"></p>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
