@@ -1,5 +1,10 @@
 # Grafana Exporter
+![GitHub](https://img.shields.io/github/license/fulgerx2007/grafana-exporter)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/fulgerx2007/grafana-exporter/Go)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/fulgerx2007/grafana-exporter)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/fulgerx2007/grafana-exporter)
 
+![logo](images/logo.jpg)
 A Go application with a web UI to export Grafana dashboards and their linked libraries.
 
 ## Features
@@ -10,6 +15,10 @@ A Go application with a web UI to export Grafana dashboards and their linked lib
 - Supports nested folder hierarchies
 - Search and filter capabilities
 - Works with Grafana v9.x and v10.x+
+
+### Example
+![Example](images/Screenshot_1.png)
+![Example](images/Screenshot_2.png)
 
 ## Requirements
 
