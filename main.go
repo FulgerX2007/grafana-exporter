@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +20,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
+
+//go:embed public/*
+var publicFS embed.FS
 
 // Configuration holds application settings from .env
 type Config struct {
@@ -825,4 +830,17 @@ func getEnvFloat(key string, fallback float64) float64 {
 		}
 	}
 	return fallback
+}
+
+// setupStaticFiles sets up the static file server with embedded files
+func setupStaticFiles(e *echo.Echo) {
+	// Get the subdirectory from the embedded filesystem
+	fsys, err := fs.Sub(publicFS, "public")
+	if err != nil {
+		log.Fatalf("Failed to get public subdirectory: %v", err)
+	}
+
+	// Use the filesystem for static file serving
+	fileServer := http.FileServer(http.FS(fsys))
+	e.GET("/*", echo.WrapHandler(fileServer))
 }
