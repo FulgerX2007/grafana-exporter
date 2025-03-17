@@ -475,17 +475,9 @@ func exportDashboards(c echo.Context) error {
 	// Create timestamped export directory
 	timestamp := time.Now().Format("20060102_150405")
 	exportPath := filepath.Join(config.ExportDirectory, timestamp)
-	dashboardsPath := filepath.Join(exportPath, "dashboards")
-	librariesPath := filepath.Join(exportPath, "libraries")
 
-	if err := os.MkdirAll(dashboardsPath, os.ModePerm); err != nil {
+	if err := os.MkdirAll(exportPath, os.ModePerm); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create export directory"})
-	}
-	if err := os.MkdirAll(librariesPath, os.ModePerm); err != nil {
-		return c.JSON(
-			http.StatusInternalServerError,
-			map[string]string{"error": "Failed to create libraries directory"},
-		)
 	}
 
 	// Track exported libraries to avoid duplicates
@@ -513,10 +505,10 @@ func exportDashboards(c echo.Context) error {
 		// Create folder structure if needed
 		var folderPath string
 		if dashboard.Meta.FolderID == 0 {
-			folderPath = filepath.Join(dashboardsPath, "General")
+			folderPath = filepath.Join(exportPath, "General")
 		} else {
 			folderName := dashboard.Meta.FolderTitle
-			folderPath = filepath.Join(dashboardsPath, sanitizePath(folderName))
+			folderPath = filepath.Join(exportPath, sanitizePath(folderName))
 		}
 
 		if err := os.MkdirAll(folderPath, os.ModePerm); err != nil {
@@ -560,7 +552,7 @@ func exportDashboards(c echo.Context) error {
 			)
 		}
 
-		// Export each library panel
+		// Export each library panel to the same folder as the dashboard
 		for _, libraryUID := range libraryPanels {
 			if exportedLibraries[libraryUID] {
 				continue // Skip already exported libraries
@@ -568,7 +560,7 @@ func exportDashboards(c echo.Context) error {
 
 			if err := exportLibraryElement(
 				libraryUID,
-				librariesPath,
+				folderPath, // Use the same folder as the dashboard
 				&exportResult.ExportedLibraries,
 				&exportResult.Errors,
 			); err != nil {
@@ -627,7 +619,6 @@ func extractLibraryPanelUIDs(dashboard map[string]interface{}) ([]string, error)
 
 	return libraryUIDs, nil
 }
-
 func exportLibraryElement(uid string, basePath string, count *int, errors *[]string) error {
 	url := fmt.Sprintf("%s/api/library-elements/%s", config.GrafanaURL, uid)
 	library, err := fetchAPI[LibraryElementWithMeta](url)
@@ -660,9 +651,18 @@ func exportLibraryElement(uid string, basePath string, count *int, errors *[]str
 		return fmt.Errorf("failed to create folder structure for library %s: %v", uid, err)
 	}
 
-	// Save library JSON
+	// Create a proper library element structure according to API requirements
+	libraryElementExport := map[string]interface{}{
+		"folderUid": library.Result.FolderUID,
+		"name":      library.Result.Name,
+		"model":     library.Result.Model,
+		"kind":      library.Result.Kind,
+		"uid":       library.Result.UID,
+	}
+
+	// Save library JSON with proper structure
 	filename := filepath.Join(folderPath, sanitizePath(library.Result.Name)+".json")
-	libraryJSON, err := json.MarshalIndent(library.Result.Model, "", "  ")
+	libraryJSON, err := json.MarshalIndent(libraryElementExport, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal library element %s: %v", uid, err)
 	}
