@@ -3,6 +3,7 @@
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/fulgerx2007/grafana-exporter)
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/fulgerx2007/grafana-exporter)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/fulgerx2007/grafana-exporter/test.yml)
+![Docker Publish](https://img.shields.io/github/actions/workflow/status/fulgerx2007/grafana-exporter/docker-publish.yml?label=docker)
 ![GitHub](https://img.shields.io/github/license/fulgerx2007/grafana-exporter)
 ![GitHub](https://img.shields.io/github/downloads/fulgerx2007/grafana-exporter/total)
 ![GitHub](https://img.shields.io/github/stars/fulgerx2007/grafana-exporter?style=social)
@@ -116,9 +117,27 @@ exported/
 
 ## Docker Support
 
+### Building Locally
+
 ```bash
 docker build -t grafana-exporter .
 docker run -p 8080:8080 --env-file .env -v $(pwd)/exported:/app/exported grafana-exporter
+```
+
+### Using GitHub Container Registry
+
+You can pull the pre-built image from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/fulgerx2007/grafana-exporter:latest
+docker run -p 8080:8080 --env-file .env -v $(pwd)/exported:/app/exported ghcr.io/fulgerx2007/grafana-exporter:latest
+```
+
+Or use a specific version:
+
+```bash
+docker pull ghcr.io/fulgerx2007/grafana-exporter:v1.0.0
+docker run -p 8080:8080 --env-file .env -v $(pwd)/exported:/app/exported ghcr.io/fulgerx2007/grafana-exporter:v1.0.0
 ```
 
 ## License
