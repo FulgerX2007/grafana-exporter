@@ -216,12 +216,24 @@
                             <input type="text" class="form-control" id="searchAlerts" placeholder="Search alerts...">
                         </div>
                     </div>
-                    <div id="alertsContainer" class="alerts-container">
-                        <div class="text-center py-5 text-muted">
-                            <div class="spinner-border mb-3" role="status">
-                                <span class="visually-hidden">Loading...</span>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="folders-container mb-3">
+                                <h6>Folders</h6>
+                                <div class="list-group" id="alertFoldersList">
+                                    <div class="list-group-item folder-item selected-folder" data-folder-id="all">All Folders</div>
+                                </div>
                             </div>
-                            <p>Loading alerts...</p>
+                        </div>
+                        <div class="col-md-9">
+                            <div id="alertsContainer" class="alerts-container">
+                                <div class="text-center py-5 text-muted">
+                                    <div class="spinner-border mb-3" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p>Loading alerts...</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

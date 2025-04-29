@@ -29,6 +29,7 @@ let alerts = [];
 let filteredAlerts = [];
 let selectedAlerts = new Set();
 let alertSearchQuery = '';
+let selectedAlertFolder = 'all';
 
 document.addEventListener('DOMContentLoaded', initialize);
 
@@ -116,6 +117,11 @@ async function loadAlerts() {
 }
 
 function renderFolders() {
+    renderDashboardFolders();
+    renderAlertFolders();
+}
+
+function renderDashboardFolders() {
     let html = `<div class="list-group-item folder-item ${selectedFolder === 'all' ? 'selected-folder' : ''}"
                     data-folder-id="all">All Folders</div>`;
 
@@ -164,7 +170,7 @@ function renderFolders() {
 
     foldersList.innerHTML = html;
 
-    document.querySelectorAll('.folder-item').forEach(item => {
+    document.querySelectorAll('#foldersList .folder-item').forEach(item => {
         item.addEventListener('click', (e) => {
             const now = Date.now();
             if (now - lastFolderClick < 300) {
@@ -175,7 +181,7 @@ function renderFolders() {
             const folderId = e.currentTarget.dataset.folderId;
             selectedFolder = folderId;
 
-            document.querySelectorAll('.folder-item').forEach(el => {
+            document.querySelectorAll('#foldersList .folder-item').forEach(el => {
                 el.classList.remove('selected-folder');
             });
             e.currentTarget.classList.add('selected-folder');
@@ -184,6 +190,79 @@ function renderFolders() {
 
             setTimeout(() => {
                 filterDashboards();
+                hideLoading();
+            }, 100);
+        });
+    });
+}
+
+function renderAlertFolders() {
+    const alertFoldersList = document.getElementById('alertFoldersList');
+    
+    let html = `<div class="list-group-item folder-item ${selectedAlertFolder === 'all' ? 'selected-folder' : ''}"
+                    data-folder-id="all">All Folders</div>`;
+
+    html += `<div class="list-group-item folder-item ${selectedAlertFolder === '0' ? 'selected-folder' : ''}"
+                data-folder-id="0">General</div>`;
+
+    const folderMap = new Map();
+    const rootFolders = [];
+
+    folders.forEach(folder => {
+        if (folder.parentUid) {
+            if (!folderMap.has(folder.parentUid)) {
+                folderMap.set(folder.parentUid, []);
+            }
+            folderMap.get(folder.parentUid).push(folder);
+        } else {
+            rootFolders.push(folder);
+        }
+    });
+
+    function renderFolder(folder, level) {
+        const indent = level * 20;
+        const levelBadge = `<span class="badge bg-primary me-2">L${level}</span>`;
+
+        html += `<div class="list-group-item folder-item ${selectedAlertFolder === folder.id.toString() ? 'selected-folder' : ''}"
+                    data-folder-id="${folder.id}" style="padding-left: ${indent + 15}px;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>${levelBadge}${folder.title}</span>
+                    </div>
+                </div>`;
+
+        if (folderMap.has(folder.uid)) {
+            folderMap.get(folder.uid).forEach(child => {
+                renderFolder(child, level + 1);
+            });
+        }
+    }
+
+    rootFolders.forEach(folder => {
+        renderFolder(folder, 1);
+    });
+
+    alertFoldersList.innerHTML = html;
+
+    document.querySelectorAll('#alertFoldersList .folder-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const now = Date.now();
+            if (now - lastFolderClick < 300) {
+                return;
+            }
+            lastFolderClick = now;
+
+            const folderId = e.currentTarget.dataset.folderId;
+            selectedAlertFolder = folderId;
+
+            document.querySelectorAll('#alertFoldersList .folder-item').forEach(el => {
+                el.classList.remove('selected-folder');
+            });
+            e.currentTarget.classList.add('selected-folder');
+
+            showLoading('Filtering alerts...', `Filtering by folder ID: ${folderId}`);
+
+            setTimeout(() => {
+                filterAlerts();
                 hideLoading();
             }, 100);
         });
@@ -419,10 +498,11 @@ function clearAlertSelection() {
 function updateSelectedCount() {
     const dashboardCount = selectedDashboards.size;
     const alertCount = selectedAlerts.size;
+    const totalCount = dashboardCount + alertCount;
     
-    selectedCountElement.textContent = dashboardCount;
+    selectedCountElement.textContent = totalCount;
     
-    exportBtn.disabled = (dashboardCount === 0 && alertCount === 0);
+    exportBtn.disabled = (totalCount === 0);
     
     if (dashboardCount > 0 && alertCount > 0) {
         exportBtn.textContent = `Export ${dashboardCount} Dashboards & ${alertCount} Alerts`;
@@ -437,16 +517,26 @@ function updateSelectedCount() {
 
 function filterAlerts() {
     console.log("Filtering alerts...");
+    console.log("Selected alert folder:", selectedAlertFolder);
     console.log("Total alerts:", alerts.length);
 
+    // First filter by folder
+    if (selectedAlertFolder === 'all') {
+        filteredAlerts = [...alerts];
+    } else {
+        const folderId = parseInt(selectedAlertFolder);
+        filteredAlerts = alerts.filter(alert => {
+            return alert.folderId === folderId;
+        });
+    }
+
+    // Then apply search filter if needed
     if (alertSearchQuery && alertSearchQuery.length > 0) {
         const query = alertSearchQuery.toLowerCase();
-        filteredAlerts = alerts.filter(alert => {
+        filteredAlerts = filteredAlerts.filter(alert => {
             return alert.title.toLowerCase().includes(query) || 
                    (alert.folderTitle && alert.folderTitle.toLowerCase().includes(query));
         });
-    } else {
-        filteredAlerts = [...alerts];
     }
 
     console.log("Filtered alerts:", filteredAlerts.length);
