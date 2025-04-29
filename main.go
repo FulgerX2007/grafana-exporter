@@ -24,17 +24,16 @@ import (
 //go:embed public/*
 var publicFS embed.FS
 
-// Configuration holds application settings from .env
 type Config struct {
 	GrafanaURL      string
 	GrafanaAPIKey   string
 	ExportDirectory string
+	ServerHost      string
 	ServerPort      string
 	SkipTLSVerify   bool
 	GrafanaVersion  float64 // Add this field
 }
 
-// Dashboard represents a Grafana dashboard
 type Dashboard struct {
 	ID         int      `json:"id"`
 	UID        string   `json:"uid"`
@@ -47,12 +46,10 @@ type Dashboard struct {
 	Tags       []string `json:"tags,omitempty"`
 }
 
-// DashboardResponse is the API response structure for dashboards
 type DashboardResponse struct {
 	Dashboards []Dashboard `json:"dashboards"`
 }
 
-// Folder represents a Grafana folder
 type Folder struct {
 	ID             int    `json:"id"`
 	UID            string `json:"uid"`
@@ -72,10 +69,8 @@ type Folder struct {
 	DashboardCount int    `json:"dashboardCount,omitempty"`
 }
 
-// FolderResponse is the API response for folders
 type FolderResponse []Folder
 
-// LibraryElement represents a Grafana library element
 type LibraryElement struct {
 	ID        int    `json:"id"`
 	UID       string `json:"uid"`
@@ -85,12 +80,10 @@ type LibraryElement struct {
 	FolderUID string `json:"folderUid"`
 }
 
-// LibraryElementsResponse is the API response for library elements
 type LibraryElementsResponse struct {
 	Result []LibraryElement `json:"result"`
 }
 
-// DashboardWithMeta represents a dashboard with its metadata
 type DashboardWithMeta struct {
 	Dashboard map[string]interface{} `json:"dashboard"`
 	Meta      struct {
@@ -100,7 +93,6 @@ type DashboardWithMeta struct {
 	} `json:"meta"`
 }
 
-// LibraryElementWithMeta represents a library element with its metadata
 type LibraryElementWithMeta struct {
 	Result struct {
 		ID        int                    `json:"id"`
@@ -113,26 +105,36 @@ type LibraryElementWithMeta struct {
 	} `json:"result"`
 }
 
+type Alert struct {
+	ID          int    `json:"id"`
+	UID         string `json:"uid"`
+	Title       string `json:"title"`
+	FolderID    int    `json:"folderId"`
+	FolderUID   string `json:"folderUid,omitempty"`
+	FolderTitle string `json:"folderTitle,omitempty"`
+}
+
+type AlertResponse struct {
+	Alerts []Alert `json:"alerts"`
+}
+
 var config Config
 var folderCache map[string]string
 
 func main() {
-	// Initialize the application
 	initializationError := initialize()
 
-	// Setup Echo
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
-	// API endpoints
 	e.GET("/api/folders", getFolders)
 	e.GET("/api/dashboards", getDashboards)
 	e.GET("/api/libraries", getLibraries)
+	e.GET("/api/alerts", getAlerts)
 	e.POST("/api/export", exportDashboards)
 
-	// Add endpoint to check if .env exists
 	e.GET(
 		"/api/config-status", func(c echo.Context) error {
 			return c.JSON(
@@ -144,48 +146,41 @@ func main() {
 		},
 	)
 
-	// Serve static files from embedded filesystem
 	setupStaticFiles(e)
 
-	// Start server
-	log.Printf("Server started on http://localhost:%s", config.ServerPort)
-	e.Logger.Fatal(e.Start(":" + config.ServerPort))
+	log.Printf("Server started on http://%s:%s", config.ServerHost, config.ServerPort)
+	e.Logger.Fatal(e.Start(config.ServerHost + ":" + config.ServerPort))
 }
 
 func initialize() error {
-	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found, using environment variables")
-		// Check if file doesn't exist specifically
 		if os.IsNotExist(err) {
 			return fmt.Errorf("missing .env file: %v", err)
 		}
 	}
 
-	// Initialize configuration
 	config = Config{
 		GrafanaURL:      getEnv("GRAFANA_URL", "http://localhost:3000"),
 		GrafanaAPIKey:   getEnv("GRAFANA_API_KEY", ""),
 		ExportDirectory: getEnv("EXPORT_DIRECTORY", "./exported"),
+		ServerHost:      getEnv("SERVER_HOST", "127.0.0.1"),
 		ServerPort:      getEnv("SERVER_PORT", "8080"),
 		SkipTLSVerify:   getEnvBool("SKIP_TLS_VERIFY", false),
 		GrafanaVersion:  getEnvFloat("GRAFANA_VERSION", 11.1),
 	}
 
-	// Initialize folder cache
 	folderCache = make(map[string]string)
 
-	// Ensure export directory exists
 	if err := os.MkdirAll(config.ExportDirectory, os.ModePerm); err != nil {
 		log.Fatalf("Failed to create export directory: %v", err)
 	}
 
 	log.Printf("Initialized with Grafana URL: %s", config.GrafanaURL)
 	log.Printf("Export directory: %s", config.ExportDirectory)
-	log.Printf("Server running on port: %s", config.ServerPort)
+	log.Printf("Server running on host and port: %s:%s", config.ServerHost, config.ServerPort)
 	log.Printf("Grafana version: %.1f", config.GrafanaVersion)
 
-	// Check Grafana connection
 	checkGrafanaConnection()
 
 	return nil
@@ -225,7 +220,6 @@ func getEnvBool(key string, fallback bool) bool {
 func checkGrafanaConnection() {
 	url := fmt.Sprintf("%s/api/health", config.GrafanaURL)
 
-	// Create custom HTTP client with optional TLS verification skipping
 	client := &http.Client{}
 	if config.SkipTLSVerify {
 		client.Transport = &http.Transport{
@@ -252,7 +246,6 @@ func checkGrafanaConnection() {
 }
 
 func getFolders(c echo.Context) error {
-	// First, get all top-level folders (where parentUid is not specified)
 	url := fmt.Sprintf("%s/api/folders?limit=1000", config.GrafanaURL)
 
 	var topLevelFolders []Folder
@@ -263,31 +256,25 @@ func getFolders(c echo.Context) error {
 
 	log.Printf("Retrieved %d top-level folders from API", len(topLevelFolders))
 
-	// Create a slice to store all folders (top-level and nested)
 	allFolders := make([]Folder, len(topLevelFolders))
 	copy(allFolders, topLevelFolders)
 
-	// Add top-level folders to the folder cache
 	for _, folder := range topLevelFolders {
 		folderCache[folder.UID] = folder.Title
 	}
 
-	// Recursively get all nested folders
 	processedFolders := make(map[string]bool)
 	for _, folder := range topLevelFolders {
 		processedFolders[folder.UID] = true
 	}
 
-	// Start with top-level folders
 	foldersToProcess := make([]Folder, len(topLevelFolders))
 	copy(foldersToProcess, topLevelFolders)
 
-	// Process folders in waves until we've gone through all levels
 	for len(foldersToProcess) > 0 {
 		var nextWave []Folder
 
 		for _, parentFolder := range foldersToProcess {
-			// Get children of this folder
 			nestedURL := fmt.Sprintf(
 				"%s/api/folders?limit=1000&withParents=true&parentUid=%s",
 				config.GrafanaURL, parentFolder.UID,
@@ -302,18 +289,14 @@ func getFolders(c echo.Context) error {
 					len(childFolders), parentFolder.Title, parentFolder.UID,
 				)
 
-				// Process each child folder
 				for i := range childFolders {
-					// Ensure ParentUID is set
 					childFolders[i].ParentUID = parentFolder.UID
 					folderCache[childFolders[i].UID] = childFolders[i].Title
 
-					// Add to all folders if we haven't processed it before
 					if !processedFolders[childFolders[i].UID] {
 						allFolders = append(allFolders, childFolders[i])
 						processedFolders[childFolders[i].UID] = true
 
-						// Add to next wave for processing its children
 						nextWave = append(nextWave, childFolders[i])
 					}
 				}
@@ -325,12 +308,10 @@ func getFolders(c echo.Context) error {
 			}
 		}
 
-		// Set up next wave of folders to process
 		foldersToProcess = nextWave
 		log.Printf("Next wave: %d folders to process", len(foldersToProcess))
 	}
 
-	// Count how many folders have parent-child relationships
 	nestedCount := 0
 	for _, folder := range allFolders {
 		if folder.ParentUID != "" {
@@ -343,14 +324,12 @@ func getFolders(c echo.Context) error {
 		len(allFolders), len(topLevelFolders), nestedCount,
 	)
 
-	// Get dashboard count for each folder
 	dashboardsUrl := fmt.Sprintf("%s/api/search?type=dash-db&limit=5000", config.GrafanaURL)
 	var searchResult []Dashboard
 	err = fetchAPIRaw(dashboardsUrl, &searchResult)
 	if err != nil {
 		log.Printf("Warning: Could not get dashboard counts: %v", err)
 	} else {
-		// Count dashboards per folder
 		folderDashboardCounts := make(map[int]int)
 		for _, dash := range searchResult {
 			if dash.Type == "" || dash.Type == "dash-db" {
@@ -358,7 +337,6 @@ func getFolders(c echo.Context) error {
 			}
 		}
 
-		// Add dashboard counts to folder response
 		for i := range allFolders {
 			count := folderDashboardCounts[allFolders[i].ID]
 			allFolders[i].DashboardCount = count
@@ -369,10 +347,8 @@ func getFolders(c echo.Context) error {
 }
 
 func getDashboards(c echo.Context) error {
-	// Use the search API with expanded response to get all dashboards
 	url := fmt.Sprintf("%s/api/search?type=dash-db&limit=5000", config.GrafanaURL)
 
-	// The API returns an array, not an object with a dashboards field
 	var searchResult []Dashboard
 	err := fetchAPIRaw(url, &searchResult)
 	if err != nil {
@@ -389,12 +365,9 @@ func getDashboards(c echo.Context) error {
 		}
 	}
 
-	// Filter our results to only include actual dashboards
 	var dashboardsOnly []Dashboard
 	for _, item := range searchResult {
-		// Include if it's explicitly a dashboard or if Type is not specified
 		if item.Type == "" || item.Type == "dash-db" {
-			// If the dashboard has a Title and UID, consider it valid
 			if item.Title != "" && item.UID != "" {
 				dashboardsOnly = append(dashboardsOnly, item)
 			}
@@ -403,41 +376,34 @@ func getDashboards(c echo.Context) error {
 
 	log.Printf("Filtered to %d actual dashboards", len(dashboardsOnly))
 
-	// Create a response structure that matches what the frontend expects
 	response := DashboardResponse{
 		Dashboards: dashboardsOnly,
 	}
 
-	// Load folder information for dashboards that don't have folder names
 	for i, dash := range response.Dashboards {
-		// For dashboards in the General folder
 		if dash.FolderID == 0 {
 			generalStr := "General"
 			response.Dashboards[i].FolderName = &generalStr
 			continue
 		}
 
-		// For dashboards with missing folder name
 		if dash.FolderName == nil || *dash.FolderName == "" {
 			if dash.FolderUID != "" {
 				folderName, ok := folderCache[dash.FolderUID]
 				if ok {
 					response.Dashboards[i].FolderName = &folderName
 				} else {
-					// If folder not in cache, try to fetch it
 					folderURL := fmt.Sprintf("%s/api/folders/%s", config.GrafanaURL, dash.FolderUID)
 					var folder Folder
 					if err := fetchAPIRaw(folderURL, &folder); err == nil {
 						folderCache[folder.UID] = folder.Title
 						response.Dashboards[i].FolderName = &folder.Title
 					} else {
-						// If we can't find the folder, use a placeholder
 						unknown := fmt.Sprintf("Folder ID %d", dash.FolderID)
 						response.Dashboards[i].FolderName = &unknown
 					}
 				}
 			} else {
-				// If no folderUID, use a placeholder based on ID
 				unknown := fmt.Sprintf("Folder ID %d", dash.FolderID)
 				response.Dashboards[i].FolderName = &unknown
 			}
@@ -458,41 +424,75 @@ func getLibraries(c echo.Context) error {
 	return c.JSON(http.StatusOK, libraries)
 }
 
+func getAlerts(c echo.Context) error {
+	var alertRules []Alert
+	var err error
+
+	url := fmt.Sprintf("%s/api/v1/provisioning/alert-rules", config.GrafanaURL)
+	err = fetchAPIRaw(url, &alertRules)
+
+	if err != nil {
+		legacyURL := fmt.Sprintf("%s/api/alerts", config.GrafanaURL)
+		err = fetchAPIRaw(legacyURL, &alertRules)
+
+		if err != nil {
+			log.Printf("Warning: Could not fetch alerts: %v", err)
+			return c.JSON(http.StatusOK, AlertResponse{Alerts: []Alert{}})
+		}
+	}
+
+	log.Printf("Retrieved %d alert rules from API", len(alertRules))
+
+	for i := range alertRules {
+		if alertRules[i].FolderID == 0 {
+			alertRules[i].FolderTitle = "General"
+		} else if alertRules[i].FolderUID != "" {
+			folderName, ok := folderCache[alertRules[i].FolderUID]
+			if ok {
+				alertRules[i].FolderTitle = folderName
+			} else {
+				folderURL := fmt.Sprintf("%s/api/folders/%s", config.GrafanaURL, alertRules[i].FolderUID)
+				var folder Folder
+				if err := fetchAPIRaw(folderURL, &folder); err == nil {
+					folderCache[folder.UID] = folder.Title
+					alertRules[i].FolderTitle = folder.Title
+				} else {
+					alertRules[i].FolderTitle = fmt.Sprintf("Folder ID %d", alertRules[i].FolderID)
+				}
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, AlertResponse{Alerts: alertRules})
+}
+
 func exportDashboards(c echo.Context) error {
-	// Parse request
 	var req struct {
 		DashboardUIDs []string `json:"dashboardUIDs"`
+		AlertUIDs     []string `json:"alertUIDs"`
+		IncludeAlerts bool     `json:"includeAlerts"`
 	}
 
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
 	}
 
-	if len(req.DashboardUIDs) == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "No dashboards selected"})
+	if len(req.DashboardUIDs) == 0 && len(req.AlertUIDs) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "No dashboards or alerts selected"})
 	}
 
-	// Create timestamped export directory
 	timestamp := time.Now().Format("20060102_150405")
 	exportPath := filepath.Join(config.ExportDirectory, timestamp)
-	dashboardsPath := filepath.Join(exportPath, "dashboards")
-	librariesPath := filepath.Join(exportPath, "libraries")
 
-	if err := os.MkdirAll(dashboardsPath, os.ModePerm); err != nil {
+	if err := os.MkdirAll(exportPath, os.ModePerm); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create export directory"})
 	}
-	if err := os.MkdirAll(librariesPath, os.ModePerm); err != nil {
-		return c.JSON(
-			http.StatusInternalServerError,
-			map[string]string{"error": "Failed to create libraries directory"},
-		)
-	}
 
-	// Track exported libraries to avoid duplicates
 	exportedLibraries := make(map[string]bool)
 	exportResult := struct {
 		ExportedDashboards int      `json:"exportedDashboards"`
 		ExportedLibraries  int      `json:"exportedLibraries"`
+		ExportedAlerts     int      `json:"exportedAlerts"`
 		Errors             []string `json:"errors"`
 		ExportPath         string   `json:"exportPath"`
 	}{
@@ -500,7 +500,6 @@ func exportDashboards(c echo.Context) error {
 		ExportPath: exportPath,
 	}
 
-	// Export each dashboard
 	for _, uid := range req.DashboardUIDs {
 		dashURL := fmt.Sprintf("%s/api/dashboards/uid/%s", config.GrafanaURL, uid)
 		dashboard, err := fetchAPI[DashboardWithMeta](dashURL)
@@ -510,13 +509,12 @@ func exportDashboards(c echo.Context) error {
 			continue
 		}
 
-		// Create folder structure if needed
 		var folderPath string
 		if dashboard.Meta.FolderID == 0 {
-			folderPath = filepath.Join(dashboardsPath, "General")
+			folderPath = filepath.Join(exportPath, "General")
 		} else {
 			folderName := dashboard.Meta.FolderTitle
-			folderPath = filepath.Join(dashboardsPath, sanitizePath(folderName))
+			folderPath = filepath.Join(exportPath, sanitizePath(folderName))
 		}
 
 		if err := os.MkdirAll(folderPath, os.ModePerm); err != nil {
@@ -527,13 +525,11 @@ func exportDashboards(c echo.Context) error {
 			continue
 		}
 
-		// Extract dashboard title for filename
 		dashboardTitle, ok := dashboard.Dashboard["title"].(string)
 		if !ok {
 			dashboardTitle = uid
 		}
 
-		// Save dashboard JSON
 		filename := filepath.Join(folderPath, sanitizePath(dashboardTitle)+".json")
 		dashboardJSON, err := json.MarshalIndent(dashboard.Dashboard, "", "  ")
 		if err != nil {
@@ -551,7 +547,6 @@ func exportDashboards(c echo.Context) error {
 
 		exportResult.ExportedDashboards++
 
-		// Find and export library panels used in this dashboard
 		libraryPanels, err := extractLibraryPanelUIDs(dashboard.Dashboard)
 		if err != nil {
 			exportResult.Errors = append(
@@ -560,15 +555,14 @@ func exportDashboards(c echo.Context) error {
 			)
 		}
 
-		// Export each library panel
 		for _, libraryUID := range libraryPanels {
 			if exportedLibraries[libraryUID] {
-				continue // Skip already exported libraries
+				continue
 			}
 
 			if err := exportLibraryElement(
 				libraryUID,
-				librariesPath,
+				folderPath, // Use the same folder as the dashboard
 				&exportResult.ExportedLibraries,
 				&exportResult.Errors,
 			); err != nil {
@@ -580,13 +574,57 @@ func exportDashboards(c echo.Context) error {
 		}
 	}
 
+	if req.IncludeAlerts {
+		for _, uid := range req.AlertUIDs {
+			alertURL := fmt.Sprintf("%s/api/v1/provisioning/alert-rules/%s", config.GrafanaURL, uid)
+			var alert map[string]interface{}
+			err := fetchAPIRaw(alertURL, &alert)
+
+			if err != nil {
+				legacyURL := fmt.Sprintf("%s/api/alerts/%s", config.GrafanaURL, uid)
+				err = fetchAPIRaw(legacyURL, &alert)
+			}
+
+			if err != nil {
+				exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Failed to fetch alert %s: %v", uid, err))
+				continue
+			}
+
+			alertsPath := filepath.Join(exportPath, "Alerts")
+			if err := os.MkdirAll(alertsPath, os.ModePerm); err != nil {
+				exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Failed to create alerts folder: %v", err))
+				continue
+			}
+
+			var alertTitle string
+			if title, ok := alert["title"].(string); ok {
+				alertTitle = title
+			} else {
+				alertTitle = uid
+			}
+
+			filename := filepath.Join(alertsPath, sanitizePath(alertTitle)+".json")
+			alertJSON, err := json.MarshalIndent(alert, "", "  ")
+			if err != nil {
+				exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Failed to marshal alert %s: %v", uid, err))
+				continue
+			}
+
+			if err := os.WriteFile(filename, alertJSON, 0644); err != nil {
+				exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Failed to write alert %s: %v", uid, err))
+				continue
+			}
+
+			exportResult.ExportedAlerts++
+		}
+	}
+
 	return c.JSON(http.StatusOK, exportResult)
 }
 
 func extractLibraryPanelUIDs(dashboard map[string]interface{}) ([]string, error) {
 	libraryUIDs := make([]string, 0)
 
-	// Check if dashboard has panels
 	panelsInterface, ok := dashboard["panels"]
 	if !ok {
 		return libraryUIDs, nil
@@ -597,21 +635,18 @@ func extractLibraryPanelUIDs(dashboard map[string]interface{}) ([]string, error)
 		return libraryUIDs, fmt.Errorf("panels is not an array")
 	}
 
-	// Extract library panel UIDs from panels
 	for _, panelInterface := range panels {
 		panel, ok := panelInterface.(map[string]interface{})
 		if !ok {
 			continue
 		}
 
-		// Check if panel is a library panel
 		if libraryPanel, ok := panel["libraryPanel"].(map[string]interface{}); ok {
 			if uid, ok := libraryPanel["uid"].(string); ok {
 				libraryUIDs = append(libraryUIDs, uid)
 			}
 		}
 
-		// Check for nested panels (in rows or other container panels)
 		if nestedPanelsInterface, ok := panel["panels"].([]interface{}); ok {
 			for _, nestedPanelInterface := range nestedPanelsInterface {
 				if nestedPanel, ok := nestedPanelInterface.(map[string]interface{}); ok {
@@ -636,12 +671,10 @@ func exportLibraryElement(uid string, basePath string, count *int, errors *[]str
 		return fmt.Errorf("failed to fetch library element %s: %v", uid, err)
 	}
 
-	// Create folder structure
 	var folderPath string
 	if library.Result.FolderID == 0 {
 		folderPath = filepath.Join(basePath, "General")
 	} else {
-		// Get folder name from cache or API
 		folderName, ok := folderCache[library.Result.FolderUID]
 		if !ok {
 			folderURL := fmt.Sprintf("%s/api/folders/%s", config.GrafanaURL, library.Result.FolderUID)
@@ -660,9 +693,16 @@ func exportLibraryElement(uid string, basePath string, count *int, errors *[]str
 		return fmt.Errorf("failed to create folder structure for library %s: %v", uid, err)
 	}
 
-	// Save library JSON
+	libraryElementExport := map[string]interface{}{
+		"folderUid": library.Result.FolderUID,
+		"name":      library.Result.Name,
+		"model":     library.Result.Model,
+		"kind":      library.Result.Kind,
+		"uid":       library.Result.UID,
+	}
+
 	filename := filepath.Join(folderPath, sanitizePath(library.Result.Name)+".json")
-	libraryJSON, err := json.MarshalIndent(library.Result.Model, "", "  ")
+	libraryJSON, err := json.MarshalIndent(libraryElementExport, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal library element %s: %v", uid, err)
 	}
@@ -676,7 +716,6 @@ func exportLibraryElement(uid string, basePath string, count *int, errors *[]str
 }
 
 func sanitizePath(path string) string {
-	// Replace characters that are problematic in filenames
 	sanitized := strings.ReplaceAll(path, "/", "_")
 	sanitized = strings.ReplaceAll(sanitized, "\\", "_")
 	sanitized = strings.ReplaceAll(sanitized, ":", "_")
@@ -689,13 +728,9 @@ func sanitizePath(path string) string {
 	return sanitized
 }
 
-// Generic function to fetch and parse API responses
-
-// Generic function to fetch and parse API responses
 func fetchAPI[T any](url string) (T, error) {
 	var result T
 
-	// Create custom HTTP client with optional TLS verification skipping
 	client := &http.Client{}
 	if config.SkipTLSVerify {
 		client.Transport = &http.Transport{
@@ -728,9 +763,7 @@ func fetchAPI[T any](url string) (T, error) {
 	return result, nil
 }
 
-// Fetch raw API response and decode into provided target
 func fetchAPIRaw(url string, target interface{}) error {
-	// Create custom HTTP client with optional TLS verification skipping
 	client := &http.Client{}
 	if config.SkipTLSVerify {
 		client.Transport = &http.Transport{
@@ -738,7 +771,6 @@ func fetchAPIRaw(url string, target interface{}) error {
 		}
 	}
 
-	// Try up to 3 times for nested folder endpoints which might be flaky
 	maxRetries := 1
 	if strings.Contains(url, "/children") {
 		maxRetries = 3
@@ -748,7 +780,7 @@ func fetchAPIRaw(url string, target interface{}) error {
 	for i := 0; i < maxRetries; i++ {
 		if i > 0 {
 			log.Printf("Retrying API call (%d of %d): %s", i+1, maxRetries, url)
-			time.Sleep(500 * time.Millisecond) // Add a small delay between retries
+			time.Sleep(500 * time.Millisecond)
 		}
 
 		req, err := http.NewRequest("GET", url, nil)
@@ -765,7 +797,6 @@ func fetchAPIRaw(url string, target interface{}) error {
 			continue
 		}
 
-		// Read the entire response body
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
@@ -774,16 +805,14 @@ func fetchAPIRaw(url string, target interface{}) error {
 			continue
 		}
 
-		// Check status code
 		if resp.StatusCode != http.StatusOK {
 			lastErr = fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 
 			// Special case: If we're fetching subfolders and get a 404,
 			// this might mean the API endpoint is different or not supported
 			if strings.Contains(url, "/children") && resp.StatusCode == http.StatusNotFound {
-				// Return an empty array for this case instead of an error
 				if sliceTarget, ok := target.(*[]Folder); ok {
-					*sliceTarget = []Folder{} // Set an empty slice
+					*sliceTarget = []Folder{}
 					return nil
 				}
 			}
@@ -791,15 +820,13 @@ func fetchAPIRaw(url string, target interface{}) error {
 			continue
 		}
 
-		// If the response is empty or just "[]", return an empty result for slice targets
 		if len(bodyBytes) == 0 || string(bodyBytes) == "[]" {
 			if sliceTarget, ok := target.(*[]Folder); ok {
-				*sliceTarget = []Folder{} // Set an empty slice
+				*sliceTarget = []Folder{}
 				return nil
 			}
 		}
 
-		// Debug response for nested folders
 		if strings.Contains(url, "/children") {
 			preview := string(bodyBytes)
 			if len(preview) > 500 {
@@ -808,18 +835,15 @@ func fetchAPIRaw(url string, target interface{}) error {
 			log.Printf("Subfolder response: %s", preview)
 		}
 
-		// Try to decode the response
 		err = json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(target)
 		if err != nil {
 			lastErr = fmt.Errorf("JSON decode error: %v (body: %s)", err, string(bodyBytes))
 			continue
 		}
 
-		// Success
 		return nil
 	}
 
-	// If we got here, all retries failed
 	return lastErr
 }
 
@@ -832,15 +856,12 @@ func getEnvFloat(key string, fallback float64) float64 {
 	return fallback
 }
 
-// setupStaticFiles sets up the static file server with embedded files
 func setupStaticFiles(e *echo.Echo) {
-	// Get the subdirectory from the embedded filesystem
 	fsys, err := fs.Sub(publicFS, "public")
 	if err != nil {
 		log.Fatalf("Failed to get public subdirectory: %v", err)
 	}
 
-	// Use the filesystem for static file serving
 	fileServer := http.FileServer(http.FS(fsys))
 	e.GET("/*", echo.WrapHandler(fileServer))
 }

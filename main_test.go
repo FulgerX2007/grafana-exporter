@@ -13,12 +13,10 @@ import (
 )
 
 func TestGetEnv(t *testing.T) {
-	// Test with existing environment variable
 	os.Setenv("TEST_VAR", "test_value")
 	defer os.Unsetenv("TEST_VAR")
 	assert.Equal(t, "test_value", getEnv("TEST_VAR", "default"))
 
-	// Test with non-existing environment variable
 	assert.Equal(t, "default", getEnv("NON_EXISTING_VAR", "default"))
 }
 
@@ -67,7 +65,6 @@ func TestSanitizePath(t *testing.T) {
 }
 
 func TestExtractLibraryPanelUIDs(t *testing.T) {
-	// Test dashboard with library panels
 	dashboard := map[string]interface{}{
 		"panels": []interface{}{
 			map[string]interface{}{
@@ -91,7 +88,6 @@ func TestExtractLibraryPanelUIDs(t *testing.T) {
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, []string{"panel1", "panel2"}, uids)
 
-	// Test dashboard without panels
 	emptyDashboard := map[string]interface{}{}
 	uids, err = extractLibraryPanelUIDs(emptyDashboard)
 	assert.NoError(t, err)
@@ -99,18 +95,15 @@ func TestExtractLibraryPanelUIDs(t *testing.T) {
 }
 
 func TestExportLibraryElement(t *testing.T) {
-	// Create temporary directory for test
 	tempDir, err := os.MkdirTemp("", "test-export-*")
 	assert.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	// Set up test configuration
 	config = Config{
 		GrafanaURL:    "http://test-grafana",
 		GrafanaAPIKey: "test-key",
 	}
 
-	// Mock HTTP server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
@@ -135,7 +128,6 @@ func TestExportLibraryElement(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Update config to use test server
 	config.GrafanaURL = ts.URL
 
 	var count int
@@ -145,7 +137,6 @@ func TestExportLibraryElement(t *testing.T) {
 	assert.Equal(t, 1, count)
 	assert.Empty(t, errors)
 
-	// Verify file was created
 	expectedPath := filepath.Join(tempDir, "General", "Test Panel.json")
 	_, err = os.Stat(expectedPath)
 	assert.NoError(t, err)
@@ -154,7 +145,6 @@ func TestExportLibraryElement(t *testing.T) {
 func TestConfigStatusEndpoint(t *testing.T) {
 	e := echo.New()
 
-	// Test when .env file exists
 	req := httptest.NewRequest(http.MethodGet, "/api/config-status", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
