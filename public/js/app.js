@@ -199,11 +199,24 @@ function renderDashboardFolders() {
 function renderAlertFolders() {
     const alertFoldersList = document.getElementById('alertFoldersList');
     
+    // Calculate alert counts per folder
+    const folderAlertCounts = {};
+    folderAlertCounts[0] = 0; // Initialize General folder count
+    
+    // Count alerts in each folder
+    alerts.forEach(alert => {
+        const folderId = alert.folderId || 0;
+        folderAlertCounts[folderId] = (folderAlertCounts[folderId] || 0) + 1;
+    });
+    
+    // Calculate total alerts
+    const totalAlerts = alerts.length;
+    
     let html = `<div class="list-group-item folder-item ${selectedAlertFolder === 'all' ? 'selected-folder' : ''}"
-                    data-folder-id="all">All Folders</div>`;
+                    data-folder-id="all">All Folders <span class="badge bg-secondary ms-2">${totalAlerts}</span></div>`;
 
     html += `<div class="list-group-item folder-item ${selectedAlertFolder === '0' ? 'selected-folder' : ''}"
-                data-folder-id="0">General</div>`;
+                data-folder-id="0">General <span class="badge bg-secondary ms-2">${folderAlertCounts[0] || 0}</span></div>`;
 
     const folderMap = new Map();
     const rootFolders = [];
@@ -222,11 +235,14 @@ function renderAlertFolders() {
     function renderFolder(folder, level) {
         const indent = level * 20;
         const levelBadge = `<span class="badge bg-primary me-2">L${level}</span>`;
+        const alertCount = folderAlertCounts[folder.id] || 0;
+        const countBadge = `<span class="badge bg-secondary ms-2">${alertCount}</span>`;
 
         html += `<div class="list-group-item folder-item ${selectedAlertFolder === folder.id.toString() ? 'selected-folder' : ''}"
                     data-folder-id="${folder.id}" style="padding-left: ${indent + 15}px;">
                     <div class="d-flex justify-content-between align-items-center">
                         <span>${levelBadge}${folder.title}</span>
+                        ${countBadge}
                     </div>
                 </div>`;
 
