@@ -68,7 +68,21 @@
             right: 20px;
             width: 400px;
             z-index: 1000;
-        }.folder-level-badge {
+        }
+        
+        .export-options-fixed {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 400px;
+            z-index: 999;
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+        
+        .folder-level-badge {
              font-size: 0.7rem;
              margin-right: 8px;
              min-width: 26px;
@@ -119,6 +133,29 @@
     </div>
 
     <div class="alert-section" id="alertContainer"></div>
+    
+    <!-- Export Options Fixed Panel -->
+    <div class="export-options-fixed">
+        <div class="card border-0">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Export Options</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="includeLibrariesCheck" checked>
+                    <label class="form-check-label" for="includeLibrariesCheck">Include linked library panels</label>
+                </div>
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="includeAlertsCheck" checked>
+                    <label class="form-check-label" for="includeAlertsCheck">Include alert rules</label>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Selected: <span id="selectedCount">0</span></label>
+                </div>
+                <button id="exportBtn" class="btn btn-primary w-100" disabled>Export Selected</button>
+            </div>
+        </div>
+    </div>
 
     <div class="row mb-4">
         <div class="col">
@@ -161,29 +198,7 @@
         </div>
     </div>
 
-    <div class="row mb-4">
-        <div class="col">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Export Options</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="includeLibrariesCheck" checked>
-                        <label class="form-check-label" for="includeLibrariesCheck">Include linked library panels (automatic)</label>
-                    </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="includeAlertsCheck" checked>
-                        <label class="form-check-label" for="includeAlertsCheck">Include alert rules</label>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Selected dashboards: <span id="selectedCount">0</span></label>
-                    </div>
-                    <button id="exportBtn" class="btn btn-primary" disabled>Export Selected Dashboards</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Original Export Options section removed as it's now fixed at top right -->
 
     <div class="row mb-4" id="alertsSection">
         <div class="col">
