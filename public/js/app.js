@@ -1,10 +1,10 @@
-// DOM Elements
 const foldersList = document.getElementById('foldersList');
 const dashboardsContainer = document.getElementById('dashboardsContainer');
 const searchDashboard = document.getElementById('searchDashboard');
 const selectAllBtn = document.getElementById('selectAllBtn');
 const clearSelectionBtn = document.getElementById('clearSelectionBtn');
 const includeLibrariesCheck = document.getElementById('includeLibrariesCheck');
+const includeAlertsCheck = document.getElementById('includeAlertsCheck');
 const selectedCountElement = document.getElementById('selectedCount');
 const exportBtn = document.getElementById('exportBtn');
 const loadingOverlay = document.getElementById('loadingOverlay');
@@ -13,8 +13,11 @@ const debugInfo = document.getElementById('debugInfo');
 const exportResultSection = document.getElementById('exportResultSection');
 const exportResultContent = document.getElementById('exportResultContent');
 const alertContainer = document.getElementById('alertContainer');
+const alertsContainer = document.getElementById('alertsContainer');
+const searchAlerts = document.getElementById('searchAlerts');
+const selectAllAlertsBtn = document.getElementById('selectAllAlertsBtn');
+const clearAlertsSelectionBtn = document.getElementById('clearAlertsSelectionBtn');
 
-// State
 let folders = [];
 let dashboards = [];
 let filteredDashboards = [];
@@ -22,23 +25,28 @@ let selectedDashboards = new Set();
 let selectedFolder = 'all';
 let searchQuery = '';
 let lastFolderClick = Date.now();
+let alerts = [];
+let filteredAlerts = [];
+let selectedAlerts = new Set();
+let alertSearchQuery = '';
 
-// Initialize the application
 document.addEventListener('DOMContentLoaded', initialize);
 
 function initialize() {
-    // Setup event listeners
     searchDashboard.addEventListener('input', handleSearchInput);
     selectAllBtn.addEventListener('click', selectAllDashboards);
     clearSelectionBtn.addEventListener('click', clearDashboardSelection);
     exportBtn.addEventListener('click', exportSelectedDashboards);
+    
+    searchAlerts.addEventListener('input', handleAlertSearchInput);
+    selectAllAlertsBtn.addEventListener('click', selectAllAlerts);
+    clearAlertsSelectionBtn.addEventListener('click', clearAlertSelection);
 
-    // Load data
     loadFolders();
     loadDashboards();
+    loadAlerts();
 }
 
-// API Functions
 async function loadDashboards() {
     try {
         showLoading('Loading dashboards...', 'Fetching from API...');
@@ -50,7 +58,6 @@ async function loadDashboards() {
         const data = await response.json();
         dashboards = data.dashboards || [];
 
-        // Add a folderTitle property for General folder
         dashboards.forEach(dashboard => {
             if (dashboard.folderId === 0 && !dashboard.folderTitle) {
                 dashboard.folderTitle = "General";
@@ -67,7 +74,6 @@ async function loadDashboards() {
         filteredDashboards = [...dashboards];
         showLoading('Loading dashboards...', `Found ${dashboards.length} dashboards. Rendering...`);
 
-        // Set a small timeout to ensure the UI updates
         setTimeout(() => {
             hideLoading();
             renderDashboards();
@@ -78,77 +84,63 @@ async function loadDashboards() {
     }
 }
 
-async function exportSelectedDashboards() {
-    if (selectedDashboards.size === 0) {
-        showAlert('warning', 'Please select at least one dashboard to export');
-        return;
-    }
-
+async function loadAlerts() {
     try {
-        showLoading('Exporting dashboards and linked libraries...');
+        showLoading('Loading alerts...', 'Fetching from API...');
 
-        const dashboardUIDs = Array.from(selectedDashboards);
+        const response = await fetch('/api/alerts');
+        if (!response.ok) throw new Error(`Failed to load alerts: ${response.statusText}`);
 
-        const response = await fetch('/api/export', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ dashboardUIDs })
-        });
+        showLoading('Loading alerts...', 'Processing alert data...');
+        const data = await response.json();
+        alerts = data.alerts || [];
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Export failed: ${errorText}`);
+        console.log("Loaded alerts:", alerts.length);
+        if (alerts.length > 0) {
+            console.log("Sample alert:", alerts[0]);
+        } else {
+            console.log("No alerts found");
         }
 
-        const result = await response.json();
-        hideLoading();
+        filteredAlerts = [...alerts];
+        showLoading('Loading alerts...', `Found ${alerts.length} alerts. Rendering...`);
 
-        // Show results
-        showExportResults(result);
+        setTimeout(() => {
+            hideLoading();
+            renderAlerts();
+        }, 500);
     } catch (error) {
         hideLoading();
-        showAlert('error', `Export failed: ${error.message}`);
+        showAlert('error', `Error loading alerts: ${error.message}`);
     }
 }
 
-// UI Rendering Functions
 function renderFolders() {
-    // Always include "All Folders" option
     let html = `<div class="list-group-item folder-item ${selectedFolder === 'all' ? 'selected-folder' : ''}"
                     data-folder-id="all">All Folders</div>`;
 
-    // Include "General" folder (root)
     html += `<div class="list-group-item folder-item ${selectedFolder === '0' ? 'selected-folder' : ''}"
                 data-folder-id="0">General</div>`;
 
-    // Create a map of parent-child relationships
     const folderMap = new Map();
     const rootFolders = [];
 
-    // First pass: identify all folders and their parents
     folders.forEach(folder => {
-        // If it has a parentUid, it's a nested folder
         if (folder.parentUid) {
-            // Get or create array of children for this parent
             if (!folderMap.has(folder.parentUid)) {
                 folderMap.set(folder.parentUid, []);
             }
             folderMap.get(folder.parentUid).push(folder);
         } else {
-            // It's a root folder
             rootFolders.push(folder);
         }
     });
 
-    // Function to recursively render folders with proper indentation
     function renderFolder(folder, level) {
-        const indent = level * 20; // 20px indent per level
+        const indent = level * 20;
         const count = folder.dashboardCount || 0;
         const countBadge = count > 0 ? `<span class="badge bg-secondary ms-2">${count}</span>` : '';
 
-        // Add level indicator badge
         const levelBadge = `<span class="badge bg-primary me-2">L${level}</span>`;
 
         html += `<div class="list-group-item folder-item ${selectedFolder === folder.id.toString() ? 'selected-folder' : ''}"
@@ -159,7 +151,6 @@ function renderFolders() {
                     </div>
                 </div>`;
 
-        // Render children if any
         if (folderMap.has(folder.uid)) {
             folderMap.get(folder.uid).forEach(child => {
                 renderFolder(child, level + 1);
@@ -167,17 +158,14 @@ function renderFolders() {
         }
     }
 
-    // Render all root folders and their children
     rootFolders.forEach(folder => {
-        renderFolder(folder, 1); // Start at level 1 for root folders
+        renderFolder(folder, 1);
     });
 
     foldersList.innerHTML = html;
 
-    // Add event listeners
     document.querySelectorAll('.folder-item').forEach(item => {
         item.addEventListener('click', (e) => {
-            // Debounce clicks to prevent multiple rapid clicks
             const now = Date.now();
             if (now - lastFolderClick < 300) {
                 return;
@@ -187,16 +175,13 @@ function renderFolders() {
             const folderId = e.currentTarget.dataset.folderId;
             selectedFolder = folderId;
 
-            // Update UI
             document.querySelectorAll('.folder-item').forEach(el => {
                 el.classList.remove('selected-folder');
             });
             e.currentTarget.classList.add('selected-folder');
 
-            // Show loading while filtering
             showLoading('Filtering dashboards...', `Filtering by folder ID: ${folderId}`);
 
-            // Use setTimeout to allow the UI to update
             setTimeout(() => {
                 filterDashboards();
                 hideLoading();
@@ -238,7 +223,6 @@ function renderDashboards() {
 
     dashboardsContainer.innerHTML = html;
 
-    // Add event listeners
     document.querySelectorAll('.dashboard-item').forEach(item => {
         item.addEventListener('click', function(e) {
             if (e.target.classList.contains('form-check-input')) return;
@@ -261,14 +245,68 @@ function renderDashboards() {
     updateSelectedCount();
 }
 
+function renderAlerts() {
+    if (filteredAlerts.length === 0) {
+        alertsContainer.innerHTML = `
+            <div class="text-center py-5 text-muted">
+                <p>No alerts found matching your criteria</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    filteredAlerts.forEach(alert => {
+        const isSelected = selectedAlerts.has(alert.uid);
+        const folderName = alert.folderTitle || 'General';
+
+        html += `
+            <div class="dashboard-item ${isSelected ? 'selected' : ''}" data-uid="${alert.uid}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-medium">${alert.title}</div>
+                        <div class="small text-muted">Folder: ${folderName}</div>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input alert-checkbox" type="checkbox"
+                            id="alert_check_${alert.uid}" data-uid="${alert.uid}" ${isSelected ? 'checked' : ''}>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    alertsContainer.innerHTML = html;
+
+    document.querySelectorAll('.alert-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const uid = this.dataset.uid;
+            toggleAlertSelection(uid, this.checked);
+        });
+    });
+
+    document.querySelectorAll('.dashboard-item[data-uid]').forEach(item => {
+        if (item.querySelector('.alert-checkbox')) {
+            item.addEventListener('click', function(e) {
+                if (e.target.classList.contains('form-check-input')) return;
+
+                const uid = this.dataset.uid;
+                const checkbox = document.getElementById(`alert_check_${uid}`);
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    toggleAlertSelection(uid, checkbox.checked);
+                }
+            });
+        }
+    });
+}
+
 function filterDashboards() {
     console.log("Filtering dashboards...");
     console.log("Selected folder:", selectedFolder);
     console.log("Total dashboards:", dashboards.length);
 
-    // First, filter by folder
     if (selectedFolder === 'all') {
-        // All folders - no filtering needed
         filteredDashboards = [...dashboards];
     } else {
         const folderId = parseInt(selectedFolder);
@@ -277,7 +315,6 @@ function filterDashboards() {
         });
     }
 
-    // Then, filter by search term
     if (searchQuery && searchQuery.length > 0) {
         const query = searchQuery.toLowerCase();
         filteredDashboards = filteredDashboards.filter(dashboard => {
@@ -294,6 +331,11 @@ function handleSearchInput() {
     filterDashboards();
 }
 
+function handleAlertSearchInput() {
+    alertSearchQuery = searchAlerts.value.trim();
+    filterAlerts();
+}
+
 function toggleDashboardSelection(uid, isSelected) {
     if (isSelected) {
         selectedDashboards.add(uid);
@@ -301,7 +343,8 @@ function toggleDashboardSelection(uid, isSelected) {
         selectedDashboards.delete(uid);
     }
 
-    // Update UI
+    updateSelectedCount();
+
     const dashboardItem = document.querySelector(`.dashboard-item[data-uid="${uid}"]`);
     if (dashboardItem) {
         if (isSelected) {
@@ -310,7 +353,24 @@ function toggleDashboardSelection(uid, isSelected) {
             dashboardItem.classList.remove('selected');
         }
     }
+}
 
+function toggleAlertSelection(uid, isSelected) {
+    if (isSelected) {
+        selectedAlerts.add(uid);
+    } else {
+        selectedAlerts.delete(uid);
+    }
+
+    const alertItem = document.querySelector(`.dashboard-item[data-uid="${uid}"]`);
+    if (alertItem) {
+        if (isSelected) {
+            alertItem.classList.add('selected');
+        } else {
+            alertItem.classList.remove('selected');
+        }
+    }
+    
     updateSelectedCount();
 }
 
@@ -322,6 +382,7 @@ function selectAllDashboards() {
     });
 
     renderDashboards();
+    updateSelectedCount();
 }
 
 function clearDashboardSelection() {
@@ -331,12 +392,65 @@ function clearDashboardSelection() {
     });
 
     renderDashboards();
+    updateSelectedCount();
+}
+
+function selectAllAlerts() {
+    filteredAlerts.forEach(alert => {
+        selectedAlerts.add(alert.uid);
+        const checkbox = document.getElementById(`alert_check_${alert.uid}`);
+        if (checkbox) checkbox.checked = true;
+    });
+
+    renderAlerts();
+    updateSelectedCount();
+}
+
+function clearAlertSelection() {
+    selectedAlerts.clear();
+    document.querySelectorAll('.alert-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+
+    renderAlerts();
+    updateSelectedCount();
 }
 
 function updateSelectedCount() {
-    const count = selectedDashboards.size;
-    selectedCountElement.textContent = count;
-    exportBtn.disabled = count === 0;
+    const dashboardCount = selectedDashboards.size;
+    const alertCount = selectedAlerts.size;
+    
+    selectedCountElement.textContent = dashboardCount;
+    
+    exportBtn.disabled = (dashboardCount === 0 && alertCount === 0);
+    
+    if (dashboardCount > 0 && alertCount > 0) {
+        exportBtn.textContent = `Export ${dashboardCount} Dashboards & ${alertCount} Alerts`;
+    } else if (dashboardCount > 0) {
+        exportBtn.textContent = `Export ${dashboardCount} Dashboards`;
+    } else if (alertCount > 0) {
+        exportBtn.textContent = `Export ${alertCount} Alerts`;
+    } else {
+        exportBtn.textContent = 'Export Selected Items';
+    }
+}
+
+function filterAlerts() {
+    console.log("Filtering alerts...");
+    console.log("Total alerts:", alerts.length);
+
+    if (alertSearchQuery && alertSearchQuery.length > 0) {
+        const query = alertSearchQuery.toLowerCase();
+        filteredAlerts = alerts.filter(alert => {
+            return alert.title.toLowerCase().includes(query) || 
+                   (alert.folderTitle && alert.folderTitle.toLowerCase().includes(query));
+        });
+    } else {
+        filteredAlerts = [...alerts];
+    }
+
+    console.log("Filtered alerts:", filteredAlerts.length);
+    renderAlerts();
 }
 
 function showExportResults(result) {
@@ -345,7 +459,9 @@ function showExportResults(result) {
     let html = `
         <div class="alert alert-success">
             <h5>Export Completed</h5>
-            <p>Successfully exported ${result.exportedDashboards} dashboards and ${result.exportedLibraries} linked library panels.</p>
+            <p>Successfully exported ${result.exportedDashboards} dashboards, 
+               ${result.exportedAlerts || 0} alerts, and 
+               ${result.exportedLibraries} linked library panels.</p>
             <p>Export path: <code>${result.exportPath}</code></p>
         </div>
     `;
@@ -363,11 +479,9 @@ function showExportResults(result) {
 
     exportResultContent.innerHTML = html;
 
-    // Scroll to results
     exportResultSection.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Utility Functions
 function showLoading(message, debug = '') {
     loadingText.textContent = message || 'Processing...';
     debugInfo.textContent = debug;
@@ -389,7 +503,6 @@ function showAlert(type, message) {
 
     alertContainer.insertAdjacentHTML('beforeend', alertHtml);
 
-    // Auto-dismiss after 5 seconds
     setTimeout(() => {
         const alertElement = document.getElementById(alertId);
         if (alertElement) {
@@ -406,23 +519,19 @@ async function loadFolders() {
 
         const data = await response.json();
 
-        // Check if we got the enhanced debug response
         if (data.folders) {
             folders = data.folders;
             console.log("Loaded folders:", folders.length);
             console.log("Has nested structure:", data.hasNestedStructure);
             console.log("Debug info:", data.debug);
 
-            // Display debug info
             showAlert(data.hasNestedStructure ? 'info' : 'warning',
                       `Folder info: ${data.debug}`);
         } else {
-            // Backward compatibility
             folders = data;
             console.log("Loaded folders:", folders.length);
         }
 
-        // Check if any folders have parentUid
         const nestedFolders = folders.filter(f => f.parentUid);
         console.log("Folders with parentUid:", nestedFolders.length);
         if (nestedFolders.length > 0) {
@@ -432,5 +541,45 @@ async function loadFolders() {
         renderFolders();
     } catch (error) {
         showAlert('error', `Error loading folders: ${error.message}`);
+    }
+}
+
+async function exportSelectedDashboards() {
+    if (selectedDashboards.size === 0 && selectedAlerts.size === 0) {
+        showAlert('warning', 'Please select at least one dashboard or alert to export');
+        return;
+    }
+
+    try {
+        showLoading('Exporting dashboards, alerts, and linked libraries...');
+
+        const dashboardUIDs = Array.from(selectedDashboards);
+        const alertUIDs = Array.from(selectedAlerts);
+        const includeAlerts = includeAlertsCheck.checked;
+
+        const response = await fetch('/api/export', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                dashboardUIDs,
+                alertUIDs,
+                includeAlerts
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Export failed: ${errorText}`);
+        }
+
+        const result = await response.json();
+        hideLoading();
+
+        showExportResults(result);
+    } catch (error) {
+        hideLoading();
+        showAlert('error', `Export failed: ${error.message}`);
     }
 }

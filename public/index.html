@@ -172,10 +172,43 @@
                         <input type="checkbox" class="form-check-input" id="includeLibrariesCheck" checked>
                         <label class="form-check-label" for="includeLibrariesCheck">Include linked library panels (automatic)</label>
                     </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="includeAlertsCheck" checked>
+                        <label class="form-check-label" for="includeAlertsCheck">Include alert rules</label>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Selected dashboards: <span id="selectedCount">0</span></label>
                     </div>
                     <button id="exportBtn" class="btn btn-primary" disabled>Export Selected Dashboards</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4" id="alertsSection">
+        <div class="col">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Alert Rules</h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-2" id="selectAllAlertsBtn">Select All</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="clearAlertsSelectionBtn">Clear</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col">
+                            <input type="text" class="form-control" id="searchAlerts" placeholder="Search alerts...">
+                        </div>
+                    </div>
+                    <div id="alertsContainer" class="alerts-container">
+                        <div class="text-center py-5 text-muted">
+                            <div class="spinner-border mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p>Loading alerts...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
