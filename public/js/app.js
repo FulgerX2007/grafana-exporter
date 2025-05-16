@@ -306,6 +306,10 @@ function renderDashboards() {
                     <div>
                         <div class="fw-medium">${dashboard.title}</div>
                         <div class="small text-muted">Folder: ${folderName}</div>
+                        ${dashboard.tags && dashboard.tags.length > 0 ? 
+                            `<div class="mt-1">
+                                ${dashboard.tags.map(tag => `<span class="badge bg-warning me-1">${tag}</span>`).join('')}
+                             </div>` : ''}
                     </div>
                     <div class="form-check">
                         <input class="form-check-input dashboard-checkbox" type="checkbox"
@@ -413,7 +417,17 @@ function filterDashboards() {
     if (searchQuery && searchQuery.length > 0) {
         const query = searchQuery.toLowerCase();
         filteredDashboards = filteredDashboards.filter(dashboard => {
-            return dashboard.title.toLowerCase().includes(query);
+            // Search in title
+            if (dashboard.title.toLowerCase().includes(query)) {
+                return true;
+            }
+            
+            // Search in tags
+            if (dashboard.tags && dashboard.tags.length > 0) {
+                return dashboard.tags.some(tag => tag.toLowerCase().includes(query));
+            }
+            
+            return false;
         });
     }
 
@@ -560,14 +574,12 @@ function filterAlerts() {
 }
 
 function showExportResults(result) {
-    exportResultSection.style.display = 'block';
-
+    // Create export results content
     let html = `
-        <div class="alert alert-success">
-            <h5>Export Completed</h5>
-            <p>Successfully exported ${result.exportedDashboards} dashboards, 
-               ${result.exportedAlerts || 0} alerts, and 
-               ${result.exportedLibraries} linked library panels.</p>
+        <div>
+            <p>Successfully exported <strong>${result.exportedDashboards}</strong> dashboards, 
+               <strong>${result.exportedAlerts || 0}</strong> alerts, and 
+               <strong>${result.exportedLibraries}</strong> linked library panels.</p>
             <p>Export path: <code>${result.exportPath}</code></p>
         </div>
     `;
@@ -576,7 +588,7 @@ function showExportResults(result) {
         html += `
             <div class="alert alert-warning mt-3">
                 <h5>Warnings/Errors</h5>
-                <ul>
+                <ul class="mb-0">
                     ${result.errors.map(error => `<li>${error}</li>`).join('')}
                 </ul>
             </div>
@@ -584,8 +596,15 @@ function showExportResults(result) {
     }
 
     exportResultContent.innerHTML = html;
-
-    exportResultSection.scrollIntoView({ behavior: 'smooth' });
+    exportResultSection.style.display = 'block';
+    
+    // Add event listener to close button if not already added
+    const closeBtn = document.getElementById('closeExportResults');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+            exportResultSection.style.display = 'none';
+        });
+    }
 }
 
 function showLoading(message, debug = '') {

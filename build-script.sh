@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to build the DNA Dashboard Exporter for multiple platforms
+# Script to build the Dashboard Exporter for multiple platforms
 
 # Create a build directory
 mkdir -p build
@@ -35,7 +35,7 @@ build linux arm64 ""
 
 # Create .env.example in the build directory
 cat > build/.env.example << EOF
-# Grafana/DNA connection settings
+# Grafana connection settings
 GRAFANA_URL=http://localhost:3000
 GRAFANA_API_KEY=your-api-key-here
 SKIP_TLS_VERIFY=false
