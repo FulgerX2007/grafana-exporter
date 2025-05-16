@@ -306,6 +306,10 @@ function renderDashboards() {
                     <div>
                         <div class="fw-medium">${dashboard.title}</div>
                         <div class="small text-muted">Folder: ${folderName}</div>
+                        ${dashboard.tags && dashboard.tags.length > 0 ? 
+                            `<div class="mt-1">
+                                ${dashboard.tags.map(tag => `<span class="badge bg-warning me-1">${tag}</span>`).join('')}
+                             </div>` : ''}
                     </div>
                     <div class="form-check">
                         <input class="form-check-input dashboard-checkbox" type="checkbox"
@@ -413,7 +417,17 @@ function filterDashboards() {
     if (searchQuery && searchQuery.length > 0) {
         const query = searchQuery.toLowerCase();
         filteredDashboards = filteredDashboards.filter(dashboard => {
-            return dashboard.title.toLowerCase().includes(query);
+            // Search in title
+            if (dashboard.title.toLowerCase().includes(query)) {
+                return true;
+            }
+            
+            // Search in tags
+            if (dashboard.tags && dashboard.tags.length > 0) {
+                return dashboard.tags.some(tag => tag.toLowerCase().includes(query));
+            }
+            
+            return false;
         });
     }
 
