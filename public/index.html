@@ -95,6 +95,16 @@
             flex-grow: 1;
         }
 
+        /* Export results popup styling */
+        .export-result-popup {
+            position: fixed;
+            top: 90px;
+            right: 20px;
+            width: 400px;
+            z-index: 1000;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+        
         /* Different colors for different levels */
         .level-1 {
             background-color: #6610f2; /* Purple */
@@ -127,7 +137,7 @@
     <div class="container">
         <div class="row align-items-center">
             <div class="col-md-6">
-                <h2 class="mb-0">DNA Dashboard Exporter</h2>
+                <h2 class="mb-0">Dashboard Exporter</h2>
             </div>
             <div class="col-md-6">
                 <div class="d-flex justify-content-end align-items-center">
@@ -234,14 +244,14 @@
         </div>
     </div>
 
-    <div class="row mb-4" id="exportResultSection" style="display: none;">
-        <div class="col">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Export Results</h5>
-                </div>
-                <div class="card-body" id="exportResultContent">
-                </div>
+    <!-- Export result popup -->
+    <div id="exportResultSection" class="export-result-popup" style="display: none;">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center bg-success text-white">
+                <h5 class="mb-0">Export Results</h5>
+                <button type="button" class="btn-close btn-close-white" id="closeExportResults" aria-label="Close"></button>
+            </div>
+            <div class="card-body" id="exportResultContent">
             </div>
         </div>
     </div>

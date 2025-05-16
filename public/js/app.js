@@ -574,14 +574,12 @@ function filterAlerts() {
 }
 
 function showExportResults(result) {
-    exportResultSection.style.display = 'block';
-
+    // Create export results content
     let html = `
-        <div class="alert alert-success">
-            <h5>Export Completed</h5>
-            <p>Successfully exported ${result.exportedDashboards} dashboards, 
-               ${result.exportedAlerts || 0} alerts, and 
-               ${result.exportedLibraries} linked library panels.</p>
+        <div>
+            <p>Successfully exported <strong>${result.exportedDashboards}</strong> dashboards, 
+               <strong>${result.exportedAlerts || 0}</strong> alerts, and 
+               <strong>${result.exportedLibraries}</strong> linked library panels.</p>
             <p>Export path: <code>${result.exportPath}</code></p>
         </div>
     `;
@@ -590,7 +588,7 @@ function showExportResults(result) {
         html += `
             <div class="alert alert-warning mt-3">
                 <h5>Warnings/Errors</h5>
-                <ul>
+                <ul class="mb-0">
                     ${result.errors.map(error => `<li>${error}</li>`).join('')}
                 </ul>
             </div>
@@ -598,8 +596,15 @@ function showExportResults(result) {
     }
 
     exportResultContent.innerHTML = html;
-
-    exportResultSection.scrollIntoView({ behavior: 'smooth' });
+    exportResultSection.style.display = 'block';
+    
+    // Add event listener to close button if not already added
+    const closeBtn = document.getElementById('closeExportResults');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+            exportResultSection.style.display = 'none';
+        });
+    }
 }
 
 function showLoading(message, debug = '') {
