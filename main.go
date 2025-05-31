@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexmullins/zip"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -471,6 +472,7 @@ func exportDashboards(c echo.Context) error {
 		DashboardUIDs []string `json:"dashboardUIDs"`
 		AlertUIDs     []string `json:"alertUIDs"`
 		IncludeAlerts bool     `json:"includeAlerts"`
+		ExportAsZip   bool     `json:"exportAsZip"`
 	}
 
 	if err := c.Bind(&req); err != nil {
@@ -619,7 +621,62 @@ func exportDashboards(c echo.Context) error {
 		}
 	}
 
+	if req.ExportAsZip {
+		zipFilePath := exportPath + ".zip"
+		err := zipDirectory(exportPath, zipFilePath)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create zip archive: " + err.Error()})
+		}
+		zipFile, err := os.Open(zipFilePath)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to open zip archive: " + err.Error()})
+		}
+		defer zipFile.Close()
+		stat, _ := zipFile.Stat()
+		c.Response().Header().Set(echo.HeaderContentType, "application/zip")
+		c.Response().Header().Set(echo.HeaderContentDisposition, "attachment; filename=\"grafana-export-"+timestamp+".zip\"")
+		c.Response().Header().Set(echo.HeaderContentLength, strconv.FormatInt(stat.Size(), 10))
+		_, err = io.Copy(c.Response().Writer, zipFile)
+		return err
+	}
+
 	return c.JSON(http.StatusOK, exportResult)
+}
+
+// zipDirectory zips the contents of srcDir into destZip (full path)
+func zipDirectory(srcDir, destZip string) error {
+	zipfile, err := os.Create(destZip)
+	if err != nil {
+		return err
+	}
+	defer zipfile.Close()
+
+	archive := zip.NewWriter(zipfile)
+	defer archive.Close()
+
+	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		f, err := archive.Create(relPath)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(f, file)
+		return err
+	})
 }
 
 func extractLibraryPanelUIDs(dashboard map[string]interface{}) ([]string, error) {

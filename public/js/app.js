@@ -17,6 +17,7 @@ const alertsContainer = document.getElementById('alertsContainer');
 const searchAlerts = document.getElementById('searchAlerts');
 const selectAllAlertsBtn = document.getElementById('selectAllAlertsBtn');
 const clearAlertsSelectionBtn = document.getElementById('clearAlertsSelectionBtn');
+const exportAsZipCheck = document.getElementById('exportAsZipCheck');
 
 let folders = [];
 let dashboards = [];
@@ -681,6 +682,7 @@ async function exportSelectedDashboards() {
         const dashboardUIDs = Array.from(selectedDashboards);
         const alertUIDs = Array.from(selectedAlerts);
         const includeAlerts = includeAlertsCheck.checked;
+        const exportAsZip = exportAsZipCheck.checked;
 
         const response = await fetch('/api/export', {
             method: 'POST',
@@ -690,7 +692,8 @@ async function exportSelectedDashboards() {
             body: JSON.stringify({ 
                 dashboardUIDs,
                 alertUIDs,
-                includeAlerts
+                includeAlerts,
+                exportAsZip
             })
         });
 
@@ -699,9 +702,33 @@ async function exportSelectedDashboards() {
             throw new Error(`Export failed: ${errorText}`);
         }
 
+        // Check if response is a zip file
+        const contentType = response.headers.get('content-type');
+        if (exportAsZip && contentType && contentType.includes('application/zip')) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            // Try to get filename from Content-Disposition header
+            const disposition = response.headers.get('content-disposition');
+            let filename = 'grafana-export.zip';
+            if (disposition && disposition.includes('filename=')) {
+                filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+            }
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+            hideLoading();
+            showAlert('success', 'ZIP export started. Check your downloads.');
+            return;
+        }
+
         const result = await response.json();
         hideLoading();
-
         showExportResults(result);
     } catch (error) {
         hideLoading();
