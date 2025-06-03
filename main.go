@@ -156,9 +156,6 @@ func main() {
 func initialize() error {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found, using environment variables")
-		if os.IsNotExist(err) {
-			return fmt.Errorf("missing .env file: %v", err)
-		}
 	}
 
 	config = Config{
