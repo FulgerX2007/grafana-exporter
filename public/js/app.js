@@ -31,6 +31,9 @@ let filteredAlerts = [];
 let selectedAlerts = new Set();
 let alertSearchQuery = '';
 let selectedAlertFolder = 'all';
+let appConfig = {
+    forceEnableZipExport: false
+};
 
 document.addEventListener('DOMContentLoaded', initialize);
 
@@ -44,6 +47,7 @@ function initialize() {
     selectAllAlertsBtn.addEventListener('click', selectAllAlerts);
     clearAlertsSelectionBtn.addEventListener('click', clearAlertSelection);
 
+    loadConfig();
     loadFolders();
     loadDashboards();
     loadAlerts();
@@ -533,7 +537,8 @@ function updateSelectedCount() {
     
     selectedCountElement.textContent = totalCount;
     
-    exportBtn.disabled = (totalCount === 0);
+    // Force enable export button if configured, otherwise disable when no items selected
+    exportBtn.disabled = appConfig.forceEnableExport ? false : (totalCount === 0);
     
     if (dashboardCount > 0 && alertCount > 0) {
         exportBtn.textContent = `Export ${dashboardCount} Dashboards & ${alertCount} Alerts`;
@@ -636,6 +641,34 @@ function showAlert(type, message) {
             bsAlert.close();
         }
     }, 5000);
+}
+
+async function loadConfig() {
+    try {
+        const response = await fetch('/api/config-status');
+        if (!response.ok) throw new Error(`Failed to load config: ${response.statusText}`);
+
+        const data = await response.json();
+        appConfig.forceEnableZipExport = data.forceEnableZipExport || false;
+        
+        console.log("Loaded config:", appConfig);
+        
+        // Force enable ZIP export checkbox if configured
+        if (appConfig.forceEnableZipExport) {
+            if (exportAsZipCheck) {
+                exportAsZipCheck.checked = true;
+                exportAsZipCheck.disabled = true; // Disable so users can't uncheck it
+            } else {
+                console.error("exportAsZipCheck element not found!");
+            }
+        }
+        
+        // Update export button state after config is loaded
+        updateSelectedCount();
+    } catch (error) {
+        console.warn('Failed to load config:', error.message);
+        // Continue with default config if loading fails
+    }
 }
 
 async function loadFolders() {

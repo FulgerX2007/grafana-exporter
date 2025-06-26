@@ -168,3 +168,78 @@ func TestConfigStatusEndpoint(t *testing.T) {
 	assert.True(t, response["hasEnvFile"].(bool))
 	assert.Equal(t, "", response["errorMessage"])
 }
+
+func TestForceEnableZipExportConfig(t *testing.T) {
+	// Test default value
+	originalConfig := config
+	defer func() { config = originalConfig }()
+
+	config = Config{
+		ForceEnableZipExport: false,
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/config-status", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := func(c echo.Context) error {
+		return c.JSON(
+			http.StatusOK,
+			map[string]interface{}{
+				"hasEnvFile":           true,
+				"errorMessage":         "",
+				"forceEnableZipExport": config.ForceEnableZipExport,
+			},
+		)
+	}
+
+	assert.NoError(t, h(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.False(t, response["forceEnableZipExport"].(bool))
+
+	// Test enabled value
+	config.ForceEnableZipExport = true
+	rec = httptest.NewRecorder()
+	c = e.NewContext(req, rec)
+
+	assert.NoError(t, h(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.True(t, response["forceEnableZipExport"].(bool))
+}
+
+func TestGetEnvBoolForceEnableZipExport(t *testing.T) {
+	// Test FORCE_ENABLE_ZIP_EXPORT environment variable parsing
+	tests := []struct {
+		name     string
+		envValue string
+		want     bool
+	}{
+		{"force enable zip true", "true", true},
+		{"force enable zip yes", "yes", true},
+		{"force enable zip 1", "1", true},
+		{"force enable zip false", "false", false},
+		{"force enable zip no", "no", false},
+		{"force enable zip 0", "0", false},
+		{"force enable zip empty", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				os.Setenv("FORCE_ENABLE_ZIP_EXPORT", tt.envValue)
+				defer os.Unsetenv("FORCE_ENABLE_ZIP_EXPORT")
+			} else {
+				os.Unsetenv("FORCE_ENABLE_ZIP_EXPORT")
+			}
+			assert.Equal(t, tt.want, getEnvBool("FORCE_ENABLE_ZIP_EXPORT", false))
+		})
+	}
+}
