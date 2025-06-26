@@ -26,13 +26,14 @@ import (
 var publicFS embed.FS
 
 type Config struct {
-	GrafanaURL      string
-	GrafanaAPIKey   string
-	ExportDirectory string
-	ServerHost      string
-	ServerPort      string
-	SkipTLSVerify   bool
-	GrafanaVersion  float64 // Add this field
+	GrafanaURL           string
+	GrafanaAPIKey        string
+	ExportDirectory      string
+	ServerHost           string
+	ServerPort           string
+	SkipTLSVerify        bool
+	GrafanaVersion       float64 // Add this field
+	ForceEnableZipExport bool    // Force enable "Export as ZIP" checkbox
 }
 
 type Dashboard struct {
@@ -140,8 +141,9 @@ func main() {
 		"/api/config-status", func(c echo.Context) error {
 			return c.JSON(
 				http.StatusOK, map[string]interface{}{
-					"hasEnvFile":   initializationError == nil,
-					"errorMessage": getInitErrorMessage(initializationError),
+					"hasEnvFile":           initializationError == nil,
+					"errorMessage":         getInitErrorMessage(initializationError),
+					"forceEnableZipExport": config.ForceEnableZipExport,
 				},
 			)
 		},
@@ -159,13 +161,14 @@ func initialize() error {
 	}
 
 	config = Config{
-		GrafanaURL:      getEnv("GRAFANA_URL", "http://localhost:3000"),
-		GrafanaAPIKey:   getEnv("GRAFANA_API_KEY", ""),
-		ExportDirectory: getEnv("EXPORT_DIRECTORY", "./exported"),
-		ServerHost:      getEnv("SERVER_HOST", "127.0.0.1"),
-		ServerPort:      getEnv("SERVER_PORT", "8080"),
-		SkipTLSVerify:   getEnvBool("SKIP_TLS_VERIFY", false),
-		GrafanaVersion:  getEnvFloat("GRAFANA_VERSION", 11.1),
+		GrafanaURL:           getEnv("GRAFANA_URL", "http://localhost:3000"),
+		GrafanaAPIKey:        getEnv("GRAFANA_API_KEY", ""),
+		ExportDirectory:      getEnv("EXPORT_DIRECTORY", "./exported"),
+		ServerHost:           getEnv("SERVER_HOST", "127.0.0.1"),
+		ServerPort:           getEnv("SERVER_PORT", "8080"),
+		SkipTLSVerify:        getEnvBool("SKIP_TLS_VERIFY", false),
+		GrafanaVersion:       getEnvFloat("GRAFANA_VERSION", 11.1),
+		ForceEnableZipExport: getEnvBool("FORCE_ENABLE_ZIP_EXPORT", false),
 	}
 
 	folderCache = make(map[string]string)
