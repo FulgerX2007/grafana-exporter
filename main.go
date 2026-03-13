@@ -521,7 +521,12 @@ func exportDashboards(c echo.Context) error {
 			folderPath = filepath.Join(exportPath, "General")
 		} else {
 			folderName := dashboard.Meta.FolderTitle
-			folderPath = filepath.Join(exportPath, sanitizePath(folderName))
+			resolved, err := safePath(exportPath, sanitizePath(folderName))
+			if err != nil {
+				exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Invalid folder path for %s: %v", uid, err))
+				continue
+			}
+			folderPath = resolved
 		}
 
 		if err := os.MkdirAll(folderPath, os.ModePerm); err != nil {
@@ -537,7 +542,12 @@ func exportDashboards(c echo.Context) error {
 			dashboardTitle = uid
 		}
 
-		filename := filepath.Join(folderPath, sanitizePath(dashboardTitle)+".json")
+		safeFilename, err := safePath(folderPath, sanitizePath(dashboardTitle)+".json")
+		if err != nil {
+			exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Invalid filename for dashboard %s: %v", uid, err))
+			continue
+		}
+		filename := safeFilename
 		dashboardJSON, err := json.MarshalIndent(dashboard.Dashboard, "", "  ")
 		if err != nil {
 			exportResult.Errors = append(
@@ -610,7 +620,12 @@ func exportDashboards(c echo.Context) error {
 				alertTitle = uid
 			}
 
-			filename := filepath.Join(alertsPath, sanitizePath(alertTitle)+".json")
+			safeAlertFilename, err := safePath(alertsPath, sanitizePath(alertTitle)+".json")
+			if err != nil {
+				exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Invalid filename for alert %s: %v", uid, err))
+				continue
+			}
+			filename := safeAlertFilename
 			alertJSON, err := json.MarshalIndent(alert, "", "  ")
 			if err != nil {
 				exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Failed to marshal alert %s: %v", uid, err))
@@ -748,7 +763,11 @@ func exportLibraryElement(uid string, basePath string, count *int, errors *[]str
 				folderCache[library.Result.FolderUID] = folderName
 			}
 		}
-		folderPath = filepath.Join(basePath, sanitizePath(folderName))
+		resolved, err := safePath(basePath, sanitizePath(folderName))
+		if err != nil {
+			return fmt.Errorf("invalid folder path for library %s: %v", uid, err)
+		}
+		folderPath = resolved
 	}
 
 	if err := os.MkdirAll(folderPath, os.ModePerm); err != nil {
@@ -763,7 +782,11 @@ func exportLibraryElement(uid string, basePath string, count *int, errors *[]str
 		"uid":       library.Result.UID,
 	}
 
-	filename := filepath.Join(folderPath, sanitizePath(library.Result.Name)+".json")
+	safeFilename, err := safePath(folderPath, sanitizePath(library.Result.Name)+".json")
+	if err != nil {
+		return fmt.Errorf("invalid filename for library %s: %v", uid, err)
+	}
+	filename := safeFilename
 	libraryJSON, err := json.MarshalIndent(libraryElementExport, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal library element %s: %v", uid, err)
@@ -787,7 +810,34 @@ func sanitizePath(path string) string {
 	sanitized = strings.ReplaceAll(sanitized, "<", "_")
 	sanitized = strings.ReplaceAll(sanitized, ">", "_")
 	sanitized = strings.ReplaceAll(sanitized, "|", "_")
+	sanitized = strings.ReplaceAll(sanitized, "..", "_")
+	sanitized = strings.TrimSpace(sanitized)
+	if sanitized == "" || sanitized == "." {
+		sanitized = "_"
+	}
 	return sanitized
+}
+
+// safePath ensures the resolved path stays within the allowed base directory,
+// preventing path traversal attacks from user-controlled input.
+func safePath(basePath string, unsafePath string) (string, error) {
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve base path: %v", err)
+	}
+
+	joined := filepath.Join(absBase, unsafePath)
+	absJoined, err := filepath.Abs(joined)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %v", err)
+	}
+
+	// Ensure the resolved path is within the base directory
+	if !strings.HasPrefix(absJoined, absBase+string(filepath.Separator)) && absJoined != absBase {
+		return "", fmt.Errorf("path traversal detected: %s escapes base %s", unsafePath, absBase)
+	}
+
+	return absJoined, nil
 }
 
 func fetchAPI[T any](url string) (T, error) {
