@@ -21,7 +21,6 @@ const searchAlerts = document.getElementById('searchAlerts');
 const selectAllAlertsBtn = document.getElementById('selectAllAlertsBtn');
 const clearAlertsSelectionBtn = document.getElementById('clearAlertsSelectionBtn');
 const exportAsZipCheck = document.getElementById('exportAsZipCheck');
-const sortOrder = document.getElementById('sortOrder');
 
 // ── State ──
 let folders = [];
@@ -48,8 +47,6 @@ function initialize() {
     selectAllBtn.addEventListener('click', selectAllDashboards);
     clearSelectionBtn.addEventListener('click', clearDashboardSelection);
     exportBtn.addEventListener('click', exportSelectedDashboards);
-    sortOrder.addEventListener('change', changeSortOrder);
-
     searchAlerts.addEventListener('input', handleAlertSearchInput);
     selectAllAlertsBtn.addEventListener('click', selectAllAlerts);
     clearAlertsSelectionBtn.addEventListener('click', clearAlertSelection);
@@ -57,10 +54,6 @@ function initialize() {
     document.getElementById('closeExportResults').addEventListener('click', () => {
         exportResultSection.style.display = 'none';
     });
-
-    const savedSortOrder = localStorage.getItem('dashboardSortOrder') || 'alphabetical';
-    currentSortOrder = savedSortOrder;
-    sortOrder.value = savedSortOrder;
 
     loadConfig();
     loadFolders();
@@ -592,11 +585,6 @@ function applySorting() {
     }
 }
 
-function changeSortOrder() {
-    currentSortOrder = sortOrder.value;
-    localStorage.setItem('dashboardSortOrder', currentSortOrder);
-    filterDashboards();
-}
 
 // ── Export ──
 async function exportSelectedDashboards() {
