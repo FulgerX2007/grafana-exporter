@@ -46,6 +46,7 @@ type Dashboard struct {
 	URL        string   `json:"url,omitempty"`
 	Type       string   `json:"type,omitempty"` // Make type optional
 	Tags       []string `json:"tags,omitempty"`
+	Updated    string   `json:"updated,omitempty"` // ISO timestamp
 }
 
 type DashboardResponse struct {
@@ -376,6 +377,10 @@ func getDashboards(c echo.Context) error {
 	}
 
 	log.Printf("Filtered to %d actual dashboards", len(dashboardsOnly))
+
+	// Fetch detailed dashboard information concurrently to get update timestamps
+	log.Printf("Fetching detailed information for %d dashboards...", len(dashboardsOnly))
+	dashboardsOnly = fetchDashboardDetails(dashboardsOnly)
 
 	response := DashboardResponse{
 		Dashboards: dashboardsOnly,
@@ -911,6 +916,57 @@ func getEnvFloat(key string, fallback float64) float64 {
 		}
 	}
 	return fallback
+}
+
+func fetchDashboardDetails(dashboards []Dashboard) []Dashboard {
+	// Use a semaphore to limit concurrent requests to avoid overwhelming Grafana
+	semaphore := make(chan struct{}, 10) // Max 10 concurrent requests
+	var results = make([]Dashboard, len(dashboards))
+
+	// Use channels to collect results
+	type result struct {
+		index     int
+		dashboard Dashboard
+	}
+	resultChan := make(chan result, len(dashboards))
+
+	// Launch goroutines for each dashboard
+	for i, dashboard := range dashboards {
+		go func(index int, dash Dashboard) {
+			semaphore <- struct{}{}        // Acquire semaphore
+			defer func() { <-semaphore }() // Release semaphore
+
+			// Fetch detailed dashboard information
+			url := fmt.Sprintf("%s/api/dashboards/uid/%s", config.GrafanaURL, dash.UID)
+			var dashboardDetail DashboardWithMeta
+			err := fetchAPIRaw(url, &dashboardDetail)
+
+			if err != nil {
+				log.Printf("Warning: Failed to fetch details for dashboard %s (%s): %v", dash.Title, dash.UID, err)
+				// Return original dashboard if we can't get details
+				resultChan <- result{index: index, dashboard: dash}
+				return
+			}
+
+			// Extract update timestamp from dashboard metadata
+			if dashboardDetail.Dashboard != nil {
+				if updated, ok := dashboardDetail.Dashboard["updated"].(string); ok {
+					dash.Updated = updated
+				}
+			}
+
+			resultChan <- result{index: index, dashboard: dash}
+		}(i, dashboard)
+	}
+
+	// Collect results
+	for i := 0; i < len(dashboards); i++ {
+		res := <-resultChan
+		results[res.index] = res.dashboard
+	}
+
+	log.Printf("Successfully fetched details for %d dashboards", len(results))
+	return results
 }
 
 func setupStaticFiles(e *echo.Echo) {

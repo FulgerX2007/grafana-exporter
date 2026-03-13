@@ -3,275 +3,1023 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grafana - Dashboard & Libraries - Exporter</title>
+    <title>Grafana Dashboard Exporter</title>
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="manifest" href="/site.webmanifest">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
     <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --grafana-orange: #F46800;
+            --grafana-orange-hover: #E05E00;
+            --grafana-orange-light: #FFF4EC;
+            --green-check: #3D9E3D;
+            --green-check-light: #E8F5E8;
+            --green-check-border: #3D9E3D;
+            --bg-page: #F7F8FA;
+            --bg-white: #FFFFFF;
+            --bg-hover: #F4F5F7;
+            --bg-selected: #E8F5E8;
+            --border-light: #E4E7EB;
+            --border-medium: #D1D5DB;
+            --text-primary: #1F2937;
+            --text-secondary: #6B7280;
+            --text-muted: #9CA3AF;
+            --blue-badge: #64748B;
+            --blue-badge-bg: #EEF1F5;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+        }
+
         body {
-            padding-top: 80px; /* Increased padding to accommodate fixed header */
-            padding-bottom: 20px;
-        }
-        .fixed-header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background-color: white;
-            z-index: 1030;
-            padding: 15px 0;
-            border-bottom: 1px solid #e5e5e5;
-        }
-        .logo {
-            max-height: 50px;
-            margin-right: 15px;
-        }
-        .folder-item {
-            cursor: pointer;
-            padding: 8px 15px;
-            border-radius: 4px;
-        }
-        .folder-item:hover {
-            background-color: #f8f9fa;
-        }
-        .selected-folder {
-            background-color: #e9ecef;
-            font-weight: bold;
-        }
-        .dashboard-item {
-            padding: 10px;
-            margin-bottom: 5px;
-            border-radius: 4px;
-            border: 1px solid #dee2e6;
-            cursor: pointer;
-        }
-        .dashboard-item:hover {
-            background-color: #f8f9fa;
-        }
-        .dashboard-item.selected {
-            background-color: #cfe2ff;
-            border-color: #9ec5fe;
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-page);
+            color: var(--text-primary);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
         }
 
-        .loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(255, 255, 255, 0.7);
+        /* ── Header ── */
+        .header {
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--border-light);
+            padding: 16px 32px;
             display: flex;
+            align-items: center;
+            gap: 14px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .header-logo {
+            width: 36px;
+            height: 36px;
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        /* ── Alerts Toast ── */
+        .alert-toast-container {
+            position: fixed;
+            top: 80px;
+            right: 24px;
+            width: 380px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .alert-toast {
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: var(--shadow-md);
+        }
+
+        .alert-toast.info { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
+        .alert-toast.warning { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+        .alert-toast.error { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+        .alert-toast.success { background: var(--green-check-light); color: #166534; border: 1px solid #A7F3D0; }
+
+        .alert-toast .close-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            opacity: 0.6;
+            color: inherit;
+        }
+
+        .alert-toast .close-btn:hover { opacity: 1; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* ── Main Layout ── */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 24px;
+            gap: 20px;
+        }
+
+        .content-area {
+            display: grid;
+            grid-template-columns: 280px 1fr 300px;
+            gap: 0;
+            background: var(--bg-white);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            min-height: 600px;
+        }
+
+        /* ── Search Bar ── */
+        .search-bar-wrapper {
+            grid-column: 1 / -1;
+            padding: 20px 24px 0;
+            border-bottom: 1px solid var(--border-light);
+            padding-bottom: 16px;
+            background: var(--bg-white);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        }
+
+        .search-bar {
+            position: relative;
+        }
+
+        .search-bar svg {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 11px 16px 11px 42px;
+            border: 1.5px solid var(--border-medium);
+            border-radius: var(--radius-md);
+            font-family: inherit;
+            font-size: 0.92rem;
+            color: var(--text-primary);
+            background: var(--bg-white);
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus {
+            border-color: var(--grafana-orange);
+            box-shadow: 0 0 0 3px rgba(244, 104, 0, 0.1);
+        }
+
+        /* ── Folders Panel (Left) ── */
+        .folders-panel {
+            border-right: 1px solid var(--border-light);
+            overflow-y: auto;
+            padding: 20px 0;
+        }
+
+        .panel-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            padding: 0 20px 12px;
+        }
+
+        .folder-tree {
+            list-style: none;
+        }
+
+        .folder-node {
+            user-select: none;
+        }
+
+        .folder-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 20px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .folder-row:hover { background: var(--bg-hover); }
+        .folder-row.active {
+            background: var(--grafana-orange-light);
+            border-left-color: var(--grafana-orange);
+        }
+
+        .folder-chevron {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
             justify-content: center;
-            align-items: center;
-            z-index: 1000;
+            flex-shrink: 0;
+            transition: transform 0.2s;
+            color: var(--text-muted);
         }
-        .alert-section {
-            position: fixed;
-            top: 90px; /* Position below our fixed header */
-            right: 20px;
-            width: 400px;
-            z-index: 1000;
-        }
-        
-        /* Export options styling removed as it's now in the header */
-        
-        .folder-level-badge {
-             font-size: 0.7rem;
-             margin-right: 8px;
-             min-width: 26px;
-             text-align: center;
-         }
 
-        .folder-item {
+        .folder-chevron.open { transform: rotate(90deg); }
+        .folder-chevron.empty { visibility: hidden; }
+
+        .folder-icon {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            color: var(--text-secondary);
+        }
+
+        .folder-label {
+            font-size: 0.88rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        .folder-count {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .folder-children {
+            list-style: none;
+            overflow: hidden;
+            transition: max-height 0.25s ease;
+        }
+
+        .folder-children.collapsed { max-height: 0 !important; }
+
+        .folder-children .folder-row {
+            padding-left: 36px;
+        }
+
+        .folder-children .folder-children .folder-row {
+            padding-left: 52px;
+        }
+
+        .level-badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: var(--blue-badge-bg);
+            color: var(--blue-badge);
+            flex-shrink: 0;
+            letter-spacing: 0.02em;
+        }
+
+        .select-entire-folder {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border-light);
+            margin-top: 8px;
+        }
+
+        /* ── Dashboards Panel (Middle) ── */
+        .dashboards-panel {
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dashboards-header {
             display: flex;
             align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-light);
+            flex-shrink: 0;
         }
 
-        .folder-title {
+        .dashboards-header h2 {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .dashboards-header-actions {
             display: flex;
             align-items: center;
-            flex-grow: 1;
+            gap: 8px;
         }
 
-        /* Export results popup styling */
+        .sort-select {
+            padding: 5px 10px;
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            background: var(--bg-white);
+            cursor: pointer;
+            outline: none;
+        }
+
+        .sort-select:focus { border-color: var(--grafana-orange); }
+
+        .btn-text {
+            padding: 5px 14px;
+            border: 1.5px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            background: var(--bg-white);
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            color: var(--text-primary);
+        }
+
+        .btn-text:hover {
+            border-color: var(--grafana-orange);
+            color: var(--grafana-orange);
+        }
+
+        .btn-text.primary {
+            color: var(--grafana-orange);
+            border-color: var(--grafana-orange);
+        }
+
+        .btn-text.primary:hover {
+            background: var(--grafana-orange-light);
+        }
+
+        .dashboards-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 24px;
+        }
+
+        .dashboard-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            border: 1.5px solid var(--border-light);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .dashboard-card:hover {
+            border-color: var(--border-medium);
+            background: var(--bg-hover);
+        }
+
+        .dashboard-card.selected {
+            border-color: var(--green-check-border);
+            background: var(--green-check-light);
+        }
+
+        .dashboard-card .check-left {
+            flex-shrink: 0;
+        }
+
+        .dashboard-card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .dashboard-card-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dashboard-card-meta {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .dashboard-card-tags {
+            display: flex;
+            gap: 4px;
+            margin-top: 5px;
+            flex-wrap: wrap;
+        }
+
+        .tag-pill {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #FFF7ED;
+            color: var(--grafana-orange);
+            font-weight: 600;
+            border: 1px solid #FDDFB6;
+        }
+
+        .dashboard-card .check-right {
+            flex-shrink: 0;
+        }
+
+        .dashboards-footer {
+            padding: 12px 24px;
+            border-top: 1px solid var(--border-light);
+            flex-shrink: 0;
+        }
+
+        .dashboards-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .dashboards-empty svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 12px;
+            opacity: 0.4;
+        }
+
+        /* ── Custom Checkbox ── */
+        .custom-check {
+            position: relative;
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .custom-check input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            z-index: 1;
+        }
+
+        .custom-check .checkmark {
+            position: absolute;
+            top: 0; left: 0;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-medium);
+            border-radius: 4px;
+            background: var(--bg-white);
+            transition: all 0.15s;
+        }
+
+        .custom-check input:checked ~ .checkmark {
+            background: var(--green-check);
+            border-color: var(--green-check);
+        }
+
+        .custom-check .checkmark::after {
+            content: '';
+            position: absolute;
+            display: none;
+            left: 6px;
+            top: 2px;
+            width: 5px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .custom-check input:checked ~ .checkmark::after { display: block; }
+
+        /* ── Export Options Panel (Right) ── */
+        .export-panel {
+            border-left: 1px solid var(--border-light);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-page);
+        }
+
+        .export-panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 16px;
+        }
+
+        .export-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            cursor: pointer;
+        }
+
+        .export-option label {
+            font-size: 0.88rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .export-divider {
+            height: 1px;
+            background: var(--border-light);
+            margin: 16px 0;
+        }
+
+        .export-summary-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .export-summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 0.88rem;
+        }
+
+        .export-summary-row .label { color: var(--text-secondary); }
+        .export-summary-row .value { font-weight: 700; color: var(--text-primary); }
+
+        .export-size {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 16px;
+            text-align: center;
+        }
+
+        .btn-preview {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 12px 16px;
+            margin-top: 16px;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            background: var(--bg-white);
+            font-family: inherit;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-preview:hover {
+            border-color: var(--border-medium);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-export {
+            width: 100%;
+            padding: 14px;
+            margin-top: auto;
+            border: none;
+            border-radius: var(--radius-md);
+            background: var(--grafana-orange);
+            color: white;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 0.01em;
+        }
+
+        .btn-export:hover:not(:disabled) {
+            background: var(--grafana-orange-hover);
+            box-shadow: 0 4px 14px rgba(244, 104, 0, 0.35);
+            transform: translateY(-1px);
+        }
+
+        .btn-export:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ── Alerts Section ── */
+        .alerts-section {
+            background: var(--bg-white);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .alerts-section .content-area {
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            min-height: 300px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-light);
+            background: var(--bg-page);
+        }
+
+        .section-header h2 {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .section-search {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        /* ── Export Results Popup ── */
         .export-result-popup {
             position: fixed;
-            top: 90px;
-            right: 20px;
-            width: 400px;
-            z-index: 1000;
-            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-        }
-        
-        /* Different colors for different levels */
-        .level-1 {
-            background-color: #6610f2; /* Purple */
-        }
-
-        .level-2 {
-            background-color: #0d6efd; /* Blue */
+            top: 80px;
+            right: 24px;
+            width: 420px;
+            z-index: 150;
+            background: var(--bg-white);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            display: none;
+            animation: slideIn 0.3s ease-out;
         }
 
-        .level-3 {
-            background-color: #198754; /* Green */
+        .export-result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            background: var(--green-check);
+            color: white;
         }
 
-        .level-4 {
-            background-color: #fd7e14; /* Orange */
+        .export-result-header h3 {
+            font-size: 0.95rem;
+            font-weight: 700;
         }
 
-        .level-5 {
-            background-color: #dc3545; /* Red */
+        .export-result-header .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            opacity: 0.8;
         }
 
-        .level-6-plus {
-            background-color: #6c757d; /* Gray for levels 6+ */
+        .export-result-header .close-btn:hover { opacity: 1; }
+
+        .export-result-body {
+            padding: 20px;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        .export-result-body code {
+            background: var(--bg-hover);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.82rem;
+        }
+
+        .export-result-warnings {
+            margin-top: 12px;
+            padding: 12px;
+            background: #FFFBEB;
+            border: 1px solid #FDE68A;
+            border-radius: var(--radius-sm);
+        }
+
+        .export-result-warnings h4 {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #92400E;
+            margin-bottom: 6px;
+        }
+
+        .export-result-warnings ul {
+            margin: 0;
+            padding-left: 18px;
+            font-size: 0.82rem;
+            color: #92400E;
+        }
+
+        /* ── Preview JSON Modal ── */
+        .json-preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 300;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s;
+        }
+
+        .json-preview-overlay.visible { display: flex; }
+
+        .json-preview-modal {
+            background: var(--bg-white);
+            border-radius: var(--radius-lg);
+            width: 90%;
+            max-width: 700px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .json-preview-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .json-preview-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .json-preview-body {
+            flex: 1;
+            overflow: auto;
+            padding: 20px 24px;
+        }
+
+        .json-preview-body pre {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* ── Loading Overlay ── */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(4px);
+            z-index: 500;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .loading-overlay.visible { display: flex; }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-light);
+            border-top-color: var(--grafana-orange);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .loading-debug {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Scrollbar ── */
+        .folders-panel::-webkit-scrollbar,
+        .dashboards-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .folders-panel::-webkit-scrollbar-track,
+        .dashboards-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .folders-panel::-webkit-scrollbar-thumb,
+        .dashboards-list::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 1024px) {
+            .content-area {
+                grid-template-columns: 1fr;
+            }
+            .folders-panel {
+                border-right: none;
+                border-bottom: 1px solid var(--border-light);
+                max-height: 250px;
+            }
+            .export-panel {
+                border-left: none;
+                border-top: 1px solid var(--border-light);
+            }
         }
     </style>
 </head>
 <body>
-<!-- Fixed Header with Export Options -->
-<div class="fixed-header">
-    <div class="container">
-        <div class="row align-items-center">
-            <div class="col-md-6">
-                <h2 class="mb-0">Grafana Dashboard Exporter</h2>
+
+<!-- Header -->
+<header class="header">
+    <img class="header-logo" src="/android-chrome-192x192.png" alt="Grafana">
+    <span class="header-title">Grafana Dashboard Exporter</span>
+</header>
+
+<!-- Alert Toasts -->
+<div class="alert-toast-container" id="alertContainer"></div>
+
+<!-- Main Content -->
+<div class="main-layout">
+    <!-- Dashboards Section -->
+    <div class="content-area" id="dashboardSection">
+        <div class="search-bar-wrapper">
+            <div class="search-bar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" class="search-input" id="searchDashboard" placeholder="Search dashboards by title or tags...">
             </div>
-            <div class="col-md-6">
-                <div class="d-flex justify-content-end align-items-center">
-                    <div class="form-check form-check-inline me-3">
-                        <input type="checkbox" class="form-check-input" id="includeLibrariesCheck" checked>
-                        <label class="form-check-label" for="includeLibrariesCheck">Include libraries</label>
+        </div>
+
+        <!-- Left: Folders -->
+        <div class="folders-panel" id="foldersPanel">
+            <div class="panel-title">Folders</div>
+            <ul class="folder-tree" id="foldersList"></ul>
+        </div>
+
+        <!-- Middle: Dashboards -->
+        <div class="dashboards-panel">
+            <div class="dashboards-header">
+                <h2>Dashboards</h2>
+                <div class="dashboards-header-actions">
+                    <select class="sort-select" id="sortOrder">
+                        <option value="alphabetical">A-Z</option>
+                        <option value="recently-updated">Recently Updated</option>
+                        <option value="oldest-updated">Oldest Updated</option>
+                    </select>
+                    <button class="btn-text primary" id="selectAllBtn">Select All</button>
+                    <button class="btn-text" id="clearSelectionBtn">Clear</button>
+                </div>
+            </div>
+            <div class="dashboards-list" id="dashboardsContainer">
+                <div class="dashboards-empty">
+                    <div class="spinner"></div>
+                    <p>Loading dashboards...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Export Options -->
+        <div class="export-panel">
+            <div class="export-panel-title">Export Options</div>
+
+            <label class="export-option">
+                <span class="custom-check">
+                    <input type="checkbox" id="includeLibrariesCheck" checked>
+                    <span class="checkmark"></span>
+                </span>
+                <label for="includeLibrariesCheck">Include library panels</label>
+            </label>
+
+            <label class="export-option">
+                <span class="custom-check">
+                    <input type="checkbox" id="includeAlertsCheck" checked>
+                    <span class="checkmark"></span>
+                </span>
+                <label for="includeAlertsCheck">Include alerts</label>
+            </label>
+
+            <label class="export-option">
+                <span class="custom-check">
+                    <input type="checkbox" id="exportAsZipCheck">
+                    <span class="checkmark"></span>
+                </span>
+                <label for="exportAsZipCheck">Export as ZIP archive</label>
+            </label>
+
+            <div class="export-divider"></div>
+
+            <div class="export-summary-title">Selected</div>
+            <div class="export-summary-row">
+                <span class="label">Dashboards:</span>
+                <span class="value" id="selectedDashCount">0</span>
+            </div>
+            <div class="export-summary-row">
+                <span class="label">Alerts:</span>
+                <span class="value" id="selectedAlertCount">0</span>
+            </div>
+            <div class="export-summary-row">
+                <span class="label">Folders:</span>
+                <span class="value" id="selectedFolderCount">0</span>
+            </div>
+
+            <div style="flex:1; min-height: 24px;"></div>
+
+            <button class="btn-export" id="exportBtn" disabled>Export (0)</button>
+        </div>
+    </div>
+
+    <!-- Alerts Section -->
+    <div class="alerts-section" id="alertsSection">
+        <div class="section-header">
+            <h2>Alert Rules</h2>
+            <div class="dashboards-header-actions">
+                <button class="btn-text primary" id="selectAllAlertsBtn">Select All</button>
+                <button class="btn-text" id="clearAlertsSelectionBtn">Clear</button>
+            </div>
+        </div>
+        <div class="section-search">
+            <div class="search-bar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" class="search-input" id="searchAlerts" placeholder="Search alerts...">
+            </div>
+        </div>
+        <div class="content-area" style="min-height:300px;">
+            <!-- Alert Folders -->
+            <div class="folders-panel" id="alertFoldersPanel">
+                <div class="panel-title">Folders</div>
+                <ul class="folder-tree" id="alertFoldersList"></ul>
+            </div>
+            <!-- Alert List -->
+            <div class="dashboards-panel" style="grid-column: span 2;">
+                <div class="dashboards-list" id="alertsContainer">
+                    <div class="dashboards-empty">
+                        <div class="spinner"></div>
+                        <p>Loading alerts...</p>
                     </div>
-                    <div class="form-check form-check-inline me-3">
-                        <input type="checkbox" class="form-check-input" id="includeAlertsCheck" checked>
-                        <label class="form-check-label" for="includeAlertsCheck">Include alerts</label>
-                    </div>
-                    <div class="form-check form-check-inline me-3">
-                        <input type="checkbox" class="form-check-input" id="exportAsZipCheck">
-                        <label class="form-check-label" for="exportAsZipCheck">Export as ZIP</label>
-                    </div>
-                    <div class="d-flex align-items-center me-3">
-                        <span class="badge bg-secondary me-1"><span id="selectedCount">0</span> selected</span>
-                    </div>
-                    <button id="exportBtn" class="btn btn-primary" disabled>Export</button>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="container">
-    <div class="alert-section" id="alertContainer"></div>
-
-    <div class="row mb-4 mt-4">
-        <div class="col">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Dashboards</h5>
-                    <div>
-                        <button class="btn btn-sm btn-outline-primary me-2" id="selectAllBtn">Select All</button>
-                        <button class="btn btn-sm btn-outline-secondary" id="clearSelectionBtn">Clear</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col">
-                            <input type="text" class="form-control" id="searchDashboard" placeholder="Search dashboards by title or tags...">
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="folders-container mb-3">
-                                <h6>Folders</h6>
-                                <div class="list-group" id="foldersList">
-                                    <div class="list-group-item folder-item selected-folder" data-folder-id="all">All Folders</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-9">
-                            <div id="dashboardsContainer" class="dashboards-container">
-                                <div class="text-center py-5 text-muted">
-                                    <div class="spinner-border mb-3" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p>Loading dashboards...</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<!-- Export Results Popup -->
+<div class="export-result-popup" id="exportResultSection">
+    <div class="export-result-header">
+        <h3>Export Results</h3>
+        <button class="close-btn" id="closeExportResults">&times;</button>
     </div>
-
-    <div class="row mb-4" id="alertsSection">
-        <div class="col">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Alert Rules</h5>
-                    <div>
-                        <button class="btn btn-sm btn-outline-primary me-2" id="selectAllAlertsBtn">Select All</button>
-                        <button class="btn btn-sm btn-outline-secondary" id="clearAlertsSelectionBtn">Clear</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col">
-                            <input type="text" class="form-control" id="searchAlerts" placeholder="Search alerts...">
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="folders-container mb-3">
-                                <h6>Folders</h6>
-                                <div class="list-group" id="alertFoldersList">
-                                    <div class="list-group-item folder-item selected-folder" data-folder-id="all">All Folders</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-9">
-                            <div id="alertsContainer" class="alerts-container">
-                                <div class="text-center py-5 text-muted">
-                                    <div class="spinner-border mb-3" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p>Loading alerts...</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Export result popup -->
-    <div id="exportResultSection" class="export-result-popup" style="display: none;">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center bg-success text-white">
-                <h5 class="mb-0">Export Results</h5>
-                <button type="button" class="btn-close btn-close-white" id="closeExportResults" aria-label="Close"></button>
-            </div>
-            <div class="card-body" id="exportResultContent">
-            </div>
-        </div>
-    </div>
+    <div class="export-result-body" id="exportResultContent"></div>
 </div>
 
-<div class="loading" id="loadingOverlay" style="display: none;">
-    <div class="d-flex flex-column align-items-center">
-        <div class="spinner-border mb-3" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-        <p id="loadingText">Processing...</p>
-        <p id="debugInfo" class="small text-muted mt-2"></p>
-    </div>
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <p class="loading-text" id="loadingText">Processing...</p>
+    <p class="loading-debug" id="debugInfo"></p>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
