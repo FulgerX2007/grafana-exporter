@@ -47,6 +47,7 @@ type Dashboard struct {
 	Type       string   `json:"type,omitempty"` // Make type optional
 	Tags       []string `json:"tags,omitempty"`
 	Updated    string   `json:"updated,omitempty"` // ISO timestamp
+	Version    int      `json:"version"`
 }
 
 type DashboardResponse struct {
@@ -94,6 +95,10 @@ type DashboardWithMeta struct {
 		FolderUID   string `json:"folderUid"`
 		FolderTitle string `json:"folderTitle"`
 	} `json:"meta"`
+}
+
+type DashboardVersionDetail struct {
+	Created string `json:"created"`
 }
 
 type LibraryElementWithMeta struct {
@@ -968,6 +973,13 @@ func getEnvFloat(key string, fallback float64) float64 {
 	return fallback
 }
 
+func extractVersionNumber(dashboard map[string]interface{}) int {
+	if v, ok := dashboard["version"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
 func fetchDashboardDetails(dashboards []Dashboard) []Dashboard {
 	// Use a semaphore to limit concurrent requests to avoid overwhelming Grafana
 	semaphore := make(chan struct{}, 10) // Max 10 concurrent requests
@@ -998,10 +1010,25 @@ func fetchDashboardDetails(dashboards []Dashboard) []Dashboard {
 				return
 			}
 
-			// Extract update timestamp from dashboard metadata
+			// Extract version and update timestamp from dashboard metadata
 			if dashboardDetail.Dashboard != nil {
 				if updated, ok := dashboardDetail.Dashboard["updated"].(string); ok {
 					dash.Updated = updated
+				}
+
+				// Extract version number
+				dash.Version = extractVersionNumber(dashboardDetail.Dashboard)
+
+				// If we have a version, fetch the version details to get the accurate created timestamp
+				if dash.Version > 0 {
+					versionURL := fmt.Sprintf("%s/api/dashboards/uid/%s/versions/%d", config.GrafanaURL, dash.UID, dash.Version)
+					var versionDetail DashboardVersionDetail
+					versionErr := fetchAPIRaw(versionURL, &versionDetail)
+					if versionErr == nil && versionDetail.Created != "" {
+						dash.Updated = versionDetail.Created
+					} else if versionErr != nil {
+						log.Printf("Warning: Failed to fetch version details for dashboard %s (v%d): %v", dash.Title, dash.Version, versionErr)
+					}
 				}
 			}
 
