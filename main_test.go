@@ -215,6 +215,116 @@ func TestForceEnableZipExportConfig(t *testing.T) {
 	assert.True(t, response["forceEnableZipExport"].(bool))
 }
 
+func TestExtractVersionNumber(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]interface{}
+		expected int
+	}{
+		{"float64 version", map[string]interface{}{"version": float64(5)}, 5},
+		{"int version", map[string]interface{}{"version": int(3)}, 3},
+		{"zero version", map[string]interface{}{"version": float64(0)}, 0},
+		{"missing version", map[string]interface{}{}, 0},
+		{"string version (unsupported)", map[string]interface{}{"version": "3"}, 0},
+		{"nil dashboard", map[string]interface{}{"version": nil}, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractVersionNumber(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFetchDashboardDetailsWithVersion(t *testing.T) {
+	originalConfig := config
+	defer func() { config = originalConfig }()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/dashboards/uid/test-uid-1":
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"dashboard": map[string]interface{}{
+					"version": float64(7),
+					"updated": "2026-01-01T00:00:00Z",
+				},
+				"meta": map[string]interface{}{
+					"folderId":    0,
+					"folderUid":   "",
+					"folderTitle": "",
+				},
+			})
+		case r.URL.Path == "/api/dashboards/uid/test-uid-1/versions/7":
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":      1,
+				"version": 7,
+				"created": "2026-03-15T10:30:00Z",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	config = Config{
+		GrafanaURL:    ts.URL,
+		GrafanaAPIKey: "test-key",
+	}
+
+	dashboards := []Dashboard{
+		{ID: 1, UID: "test-uid-1", Title: "Test Dashboard"},
+	}
+
+	result := fetchDashboardDetails(dashboards)
+	assert.Len(t, result, 1)
+	assert.Equal(t, 7, result[0].Version)
+	assert.Equal(t, "2026-03-15T10:30:00Z", result[0].Updated)
+}
+
+func TestFetchDashboardDetailsVersionAPIFallback(t *testing.T) {
+	originalConfig := config
+	defer func() { config = originalConfig }()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/dashboards/uid/test-uid-2":
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"dashboard": map[string]interface{}{
+					"version": float64(3),
+					"updated": "2026-02-01T12:00:00Z",
+				},
+				"meta": map[string]interface{}{
+					"folderId":    0,
+					"folderUid":   "",
+					"folderTitle": "",
+				},
+			})
+		case r.URL.Path == "/api/dashboards/uid/test-uid-2/versions/3":
+			// Simulate versions API failure
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	config = Config{
+		GrafanaURL:    ts.URL,
+		GrafanaAPIKey: "test-key",
+	}
+
+	dashboards := []Dashboard{
+		{ID: 2, UID: "test-uid-2", Title: "Test Dashboard 2"},
+	}
+
+	result := fetchDashboardDetails(dashboards)
+	assert.Len(t, result, 1)
+	assert.Equal(t, 3, result[0].Version)
+	// Should fall back to the updated field from dashboard detail
+	assert.Equal(t, "2026-02-01T12:00:00Z", result[0].Updated)
+}
+
 func TestGetEnvBoolForceEnableZipExport(t *testing.T) {
 	// Test FORCE_ENABLE_ZIP_EXPORT environment variable parsing
 	tests := []struct {
