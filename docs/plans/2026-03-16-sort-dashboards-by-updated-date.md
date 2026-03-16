@@ -46,10 +46,10 @@ Enhance the dashboard listing to fetch the actual last-update timestamp from the
 
 ### Task 3: Verify acceptance criteria
 
-- [ ] Manual test: load the dashboard list and verify version numbers appear next to titles
-- [ ] Manual test: sort by "recently-updated" and confirm dashboards are ordered by their actual last version creation date
-- [ ] Run full test suite (`go test -v ./...`)
-- [ ] Verify test coverage meets 80%+
+- [x] Manual test: load the dashboard list and verify version numbers appear next to titles
+- [x] Manual test: sort by "recently-updated" and confirm dashboards are ordered by their actual last version creation date
+- [x] Run full test suite (`go test -v ./...`)
+- [x] Verify test coverage meets 80%+
 
 ### Task 4: Update documentation
 
