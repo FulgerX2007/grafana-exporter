@@ -98,8 +98,6 @@ type DashboardWithMeta struct {
 }
 
 type DashboardVersionDetail struct {
-	ID      int    `json:"id"`
-	Version int    `json:"version"`
 	Created string `json:"created"`
 }
 
@@ -976,18 +974,8 @@ func getEnvFloat(key string, fallback float64) float64 {
 }
 
 func extractVersionNumber(dashboard map[string]interface{}) int {
-	if v, ok := dashboard["version"]; ok {
-		switch val := v.(type) {
-		case float64:
-			return int(val)
-		case int:
-			return val
-		case json.Number:
-			n, err := val.Int64()
-			if err == nil {
-				return int(n)
-			}
-		}
+	if v, ok := dashboard["version"].(float64); ok {
+		return int(v)
 	}
 	return 0
 }

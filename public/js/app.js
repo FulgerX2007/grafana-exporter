@@ -55,6 +55,11 @@ function initialize() {
         exportResultSection.style.display = 'none';
     });
 
+    document.getElementById('sortOrder').addEventListener('change', function() {
+        currentSortOrder = this.value;
+        filterDashboards();
+    });
+
     loadConfig();
     loadFolders();
     loadDashboards();
@@ -566,7 +571,7 @@ function updateSelectedCount() {
     dashboards.filter(d => selectedDashboards.has(d.uid)).forEach(d => folderIds.add(d.folderId));
     selectedFolderCountEl.textContent = folderIds.size;
 
-    exportBtn.disabled = appConfig.forceEnableExport ? false : (totalCount === 0);
+    exportBtn.disabled = appConfig.forceEnableZipExport ? false : (totalCount === 0);
     exportBtn.textContent = `Export (${totalCount})`;
 
 }

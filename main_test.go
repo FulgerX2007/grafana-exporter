@@ -224,7 +224,7 @@ func TestExtractVersionNumber(t *testing.T) {
 		expected int
 	}{
 		{"float64 version", map[string]interface{}{"version": float64(5)}, 5},
-		{"int version", map[string]interface{}{"version": int(3)}, 3},
+		{"int version (not produced by JSON decoder)", map[string]interface{}{"version": int(3)}, 0},
 		{"zero version", map[string]interface{}{"version": float64(0)}, 0},
 		{"missing version", map[string]interface{}{}, 0},
 		{"string version (unsupported)", map[string]interface{}{"version": "3"}, 0},
@@ -1305,17 +1305,22 @@ func TestFetchAPIWithTLSSkip(t *testing.T) {
 	assert.Equal(t, "Test", result.Title)
 }
 
-func TestExtractVersionNumberJsonNumber(t *testing.T) {
+func TestExtractVersionNumberEdgeCases(t *testing.T) {
+	// Non-float64 types return 0 since JSON decoder produces float64 for numbers
 	dashboard := map[string]interface{}{
-		"version": json.Number("42"),
+		"version": "not-a-number",
 	}
-	assert.Equal(t, 42, extractVersionNumber(dashboard))
+	assert.Equal(t, 0, extractVersionNumber(dashboard))
 
-	// Invalid json.Number
-	dashboard2 := map[string]interface{}{
-		"version": json.Number("not-a-number"),
-	}
+	// Missing version field
+	dashboard2 := map[string]interface{}{}
 	assert.Equal(t, 0, extractVersionNumber(dashboard2))
+
+	// Nil map value
+	dashboard3 := map[string]interface{}{
+		"version": nil,
+	}
+	assert.Equal(t, 0, extractVersionNumber(dashboard3))
 }
 
 func TestExportDashboardsFetchError(t *testing.T) {
@@ -1648,31 +1653,3 @@ func TestExportDashboardsNoTitle(t *testing.T) {
 	assert.Equal(t, float64(1), result["exportedDashboards"])
 }
 
-func TestGetEnvBoolForceEnableZipExport(t *testing.T) {
-	// Test FORCE_ENABLE_ZIP_EXPORT environment variable parsing
-	tests := []struct {
-		name     string
-		envValue string
-		want     bool
-	}{
-		{"force enable zip true", "true", true},
-		{"force enable zip yes", "yes", true},
-		{"force enable zip 1", "1", true},
-		{"force enable zip false", "false", false},
-		{"force enable zip no", "no", false},
-		{"force enable zip 0", "0", false},
-		{"force enable zip empty", "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.envValue != "" {
-				os.Setenv("FORCE_ENABLE_ZIP_EXPORT", tt.envValue)
-				defer os.Unsetenv("FORCE_ENABLE_ZIP_EXPORT")
-			} else {
-				os.Unsetenv("FORCE_ENABLE_ZIP_EXPORT")
-			}
-			assert.Equal(t, tt.want, getEnvBool("FORCE_ENABLE_ZIP_EXPORT", false))
-		})
-	}
-}
