@@ -81,6 +81,7 @@ async function loadDashboards() {
         });
 
         filteredDashboards = [...dashboards];
+        applySorting();
 
         setTimeout(() => {
             hideLoading();
