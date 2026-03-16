@@ -38,11 +38,11 @@ Enhance the dashboard listing to fetch the actual last-update timestamp from the
 **Files:**
 - Modify: `public/js/app.js`
 
-- [ ] In `renderDashboards`, append the version number to the dashboard title display (e.g., "Dashboard Name (v3)")
-- [ ] Only show version if the value is present and greater than 0
-- [ ] Verify sorting by "recently-updated" and "oldest-updated" still works correctly with the new timestamp source
-- [ ] Write/update tests if applicable
-- [ ] Run project test suite - must pass before task 3
+- [x] In `renderDashboards`, append the version number to the dashboard title display (e.g., "Dashboard Name (v3)")
+- [x] Only show version if the value is present and greater than 0
+- [x] Verify sorting by "recently-updated" and "oldest-updated" still works correctly with the new timestamp source
+- [x] Write/update tests if applicable
+- [x] Run project test suite - must pass before task 3
 
 ### Task 3: Verify acceptance criteria
 

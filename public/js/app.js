@@ -356,7 +356,7 @@ function renderDashboards() {
                     <span class="checkmark"></span>
                 </span>
                 <div class="dashboard-card-info">
-                    <div class="dashboard-card-title">${d.title}</div>
+                    <div class="dashboard-card-title">${d.title}${d.version > 0 ? ' <span class="dashboard-version">v' + d.version + '</span>' : ''}</div>
                     <div class="dashboard-card-meta">${folderName}${panelCount ? ' (' + panelCount + ')' : ''}${relTime ? ' &middot; ' + relTime : ''}</div>
                     ${d.tags && d.tags.length > 0 ? `<div class="dashboard-card-tags">${d.tags.map(t => `<span class="tag-pill">${t}</span>`).join('')}</div>` : ''}
                 </div>
