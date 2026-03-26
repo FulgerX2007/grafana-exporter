@@ -28,12 +28,26 @@ var publicFS embed.FS
 type Config struct {
 	GrafanaURL           string
 	GrafanaAPIKey        string
+	GrafanaUser          string
+	GrafanaPassword      string
 	ExportDirectory      string
 	ServerHost           string
 	ServerPort           string
 	SkipTLSVerify        bool
 	GrafanaVersion       float64 // Add this field
 	ForceEnableZipExport bool    // Force enable "Export as ZIP" checkbox
+}
+
+func (c Config) useBasicAuth() bool {
+	return c.GrafanaUser != "" && c.GrafanaPassword != ""
+}
+
+func (c Config) setAuth(req *http.Request) {
+	if c.useBasicAuth() {
+		req.SetBasicAuth(c.GrafanaUser, c.GrafanaPassword)
+	} else {
+		req.Header.Add("Authorization", "Bearer "+c.GrafanaAPIKey)
+	}
 }
 
 type Dashboard struct {
@@ -126,6 +140,19 @@ type AlertResponse struct {
 	Alerts []Alert `json:"alerts"`
 }
 
+type Organization struct {
+	ID   int    `json:"id"`
+	OrgID int   `json:"orgId"`
+	Name string `json:"name"`
+}
+
+func (o Organization) GetID() int {
+	if o.ID > 0 {
+		return o.ID
+	}
+	return o.OrgID
+}
+
 var config Config
 var folderCache map[string]string
 
@@ -137,6 +164,7 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
+	e.GET("/api/organizations", getOrganizations)
 	e.GET("/api/folders", getFolders)
 	e.GET("/api/dashboards", getDashboards)
 	e.GET("/api/libraries", getLibraries)
@@ -169,6 +197,8 @@ func initialize() error {
 	config = Config{
 		GrafanaURL:           getEnv("GRAFANA_URL", "http://localhost:3000"),
 		GrafanaAPIKey:        getEnv("GRAFANA_API_KEY", ""),
+		GrafanaUser:          getEnv("GRAFANA_USER", ""),
+		GrafanaPassword:      getEnv("GRAFANA_PASSWORD", ""),
 		ExportDirectory:      getEnv("EXPORT_DIRECTORY", "./exported"),
 		ServerHost:           getEnv("SERVER_HOST", "127.0.0.1"),
 		ServerPort:           getEnv("SERVER_PORT", "8080"),
@@ -187,6 +217,11 @@ func initialize() error {
 	log.Printf("Export directory: %s", config.ExportDirectory)
 	log.Printf("Server running on host and port: %s:%s", config.ServerHost, config.ServerPort)
 	log.Printf("Grafana version: %.1f", config.GrafanaVersion)
+	if config.useBasicAuth() {
+		log.Printf("Authentication: Basic auth (user: %q, password length: %d)", config.GrafanaUser, len(config.GrafanaPassword))
+	} else {
+		log.Println("Authentication: Bearer token")
+	}
 
 	checkGrafanaConnection()
 
@@ -252,11 +287,66 @@ func checkGrafanaConnection() {
 	log.Println("Successfully connected to Grafana")
 }
 
+func getOrgID(c echo.Context) int {
+	if orgIDStr := c.QueryParam("orgId"); orgIDStr != "" {
+		if id, err := strconv.Atoi(orgIDStr); err == nil {
+			return id
+		}
+	}
+	return 0
+}
+
+func getOrganizations(c echo.Context) error {
+	var orgs []Organization
+
+	// Try 1: admin endpoint /api/orgs (requires Server Admin)
+	url := fmt.Sprintf("%s/api/orgs", config.GrafanaURL)
+	err := fetchAPIRaw(url, &orgs)
+	if err == nil {
+		log.Printf("Loaded %d organizations via admin endpoint", len(orgs))
+		return c.JSON(http.StatusOK, orgs)
+	}
+	log.Printf("Admin orgs endpoint failed: %v", err)
+
+	// Try 2: user endpoint /api/user/orgs (requires user context)
+	userURL := fmt.Sprintf("%s/api/user/orgs", config.GrafanaURL)
+	err = fetchAPIRaw(userURL, &orgs)
+	if err == nil {
+		// Normalize orgId -> id
+		for i := range orgs {
+			if orgs[i].ID == 0 && orgs[i].OrgID > 0 {
+				orgs[i].ID = orgs[i].OrgID
+			}
+		}
+		log.Printf("Loaded %d organizations via user endpoint", len(orgs))
+		return c.JSON(http.StatusOK, orgs)
+	}
+	log.Printf("User orgs endpoint failed: %v", err)
+
+	// Try 3: get current org only via /api/org (works with service accounts)
+	type CurrentOrg struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	var currentOrg CurrentOrg
+	orgURL := fmt.Sprintf("%s/api/org", config.GrafanaURL)
+	err = fetchAPIRaw(orgURL, &currentOrg)
+	if err == nil {
+		orgs = []Organization{{ID: currentOrg.ID, Name: currentOrg.Name}}
+		log.Printf("Loaded current organization via /api/org: %s (ID: %d)", currentOrg.Name, currentOrg.ID)
+		return c.JSON(http.StatusOK, orgs)
+	}
+	log.Printf("Current org endpoint failed: %v", err)
+
+	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not fetch organizations from Grafana"})
+}
+
 func getFolders(c echo.Context) error {
+	orgID := getOrgID(c)
 	url := fmt.Sprintf("%s/api/folders?limit=1000", config.GrafanaURL)
 
 	var topLevelFolders []Folder
-	err := fetchAPIRaw(url, &topLevelFolders)
+	err := fetchAPIRaw(url, &topLevelFolders, orgID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -288,7 +378,7 @@ func getFolders(c echo.Context) error {
 			)
 
 			var childFolders []Folder
-			childErr := fetchAPIRaw(nestedURL, &childFolders)
+			childErr := fetchAPIRaw(nestedURL, &childFolders, orgID)
 
 			if childErr == nil && len(childFolders) > 0 {
 				log.Printf(
@@ -333,7 +423,7 @@ func getFolders(c echo.Context) error {
 
 	dashboardsUrl := fmt.Sprintf("%s/api/search?type=dash-db&limit=5000", config.GrafanaURL)
 	var searchResult []Dashboard
-	err = fetchAPIRaw(dashboardsUrl, &searchResult)
+	err = fetchAPIRaw(dashboardsUrl, &searchResult, orgID)
 	if err != nil {
 		log.Printf("Warning: Could not get dashboard counts: %v", err)
 	} else {
@@ -354,10 +444,11 @@ func getFolders(c echo.Context) error {
 }
 
 func getDashboards(c echo.Context) error {
+	orgID := getOrgID(c)
 	url := fmt.Sprintf("%s/api/search?type=dash-db&limit=5000", config.GrafanaURL)
 
 	var searchResult []Dashboard
-	err := fetchAPIRaw(url, &searchResult)
+	err := fetchAPIRaw(url, &searchResult, orgID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -385,7 +476,7 @@ func getDashboards(c echo.Context) error {
 
 	// Fetch detailed dashboard information concurrently to get update timestamps
 	log.Printf("Fetching detailed information for %d dashboards...", len(dashboardsOnly))
-	dashboardsOnly = fetchDashboardDetails(dashboardsOnly)
+	dashboardsOnly = fetchDashboardDetails(dashboardsOnly, orgID)
 
 	response := DashboardResponse{
 		Dashboards: dashboardsOnly,
@@ -406,7 +497,7 @@ func getDashboards(c echo.Context) error {
 				} else {
 					folderURL := fmt.Sprintf("%s/api/folders/%s", config.GrafanaURL, dash.FolderUID)
 					var folder Folder
-					if err := fetchAPIRaw(folderURL, &folder); err == nil {
+					if err := fetchAPIRaw(folderURL, &folder, orgID); err == nil {
 						folderCache[folder.UID] = folder.Title
 						response.Dashboards[i].FolderName = &folder.Title
 					} else {
@@ -425,9 +516,10 @@ func getDashboards(c echo.Context) error {
 }
 
 func getLibraries(c echo.Context) error {
+	orgID := getOrgID(c)
 	url := fmt.Sprintf("%s/api/library-elements?perPage=100", config.GrafanaURL)
 
-	libraries, err := fetchAPI[LibraryElementsResponse](url)
+	libraries, err := fetchAPI[LibraryElementsResponse](url, orgID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -436,15 +528,16 @@ func getLibraries(c echo.Context) error {
 }
 
 func getAlerts(c echo.Context) error {
+	orgID := getOrgID(c)
 	var alertRules []Alert
 	var err error
 
 	url := fmt.Sprintf("%s/api/v1/provisioning/alert-rules", config.GrafanaURL)
-	err = fetchAPIRaw(url, &alertRules)
+	err = fetchAPIRaw(url, &alertRules, orgID)
 
 	if err != nil {
 		legacyURL := fmt.Sprintf("%s/api/alerts", config.GrafanaURL)
-		err = fetchAPIRaw(legacyURL, &alertRules)
+		err = fetchAPIRaw(legacyURL, &alertRules, orgID)
 
 		if err != nil {
 			log.Printf("Warning: Could not fetch alerts: %v", err)
@@ -464,7 +557,7 @@ func getAlerts(c echo.Context) error {
 			} else {
 				folderURL := fmt.Sprintf("%s/api/folders/%s", config.GrafanaURL, alertRules[i].FolderUID)
 				var folder Folder
-				if err := fetchAPIRaw(folderURL, &folder); err == nil {
+				if err := fetchAPIRaw(folderURL, &folder, orgID); err == nil {
 					folderCache[folder.UID] = folder.Title
 					alertRules[i].FolderTitle = folder.Title
 				} else {
@@ -483,6 +576,7 @@ func exportDashboards(c echo.Context) error {
 		AlertUIDs     []string `json:"alertUIDs"`
 		IncludeAlerts bool     `json:"includeAlerts"`
 		ExportAsZip   bool     `json:"exportAsZip"`
+		OrgID         int      `json:"orgId"`
 	}
 
 	if err := c.Bind(&req); err != nil {
@@ -514,7 +608,7 @@ func exportDashboards(c echo.Context) error {
 
 	for _, uid := range req.DashboardUIDs {
 		dashURL := fmt.Sprintf("%s/api/dashboards/uid/%s", config.GrafanaURL, uid)
-		dashboard, err := fetchAPI[DashboardWithMeta](dashURL)
+		dashboard, err := fetchAPI[DashboardWithMeta](dashURL, req.OrgID)
 
 		if err != nil {
 			exportResult.Errors = append(exportResult.Errors, fmt.Sprintf("Failed to fetch dashboard %s: %v", uid, err))
@@ -587,6 +681,7 @@ func exportDashboards(c echo.Context) error {
 				folderPath, // Use the same folder as the dashboard
 				&exportResult.ExportedLibraries,
 				&exportResult.Errors,
+				req.OrgID,
 			); err != nil {
 				exportResult.Errors = append(exportResult.Errors, err.Error())
 				continue
@@ -600,11 +695,11 @@ func exportDashboards(c echo.Context) error {
 		for _, uid := range req.AlertUIDs {
 			alertURL := fmt.Sprintf("%s/api/v1/provisioning/alert-rules/%s", config.GrafanaURL, uid)
 			var alert map[string]interface{}
-			err := fetchAPIRaw(alertURL, &alert)
+			err := fetchAPIRaw(alertURL, &alert, req.OrgID)
 
 			if err != nil {
 				legacyURL := fmt.Sprintf("%s/api/alerts/%s", config.GrafanaURL, uid)
-				err = fetchAPIRaw(legacyURL, &alert)
+				err = fetchAPIRaw(legacyURL, &alert, req.OrgID)
 			}
 
 			if err != nil {
@@ -745,9 +840,9 @@ func extractLibraryPanelUIDs(dashboard map[string]interface{}) ([]string, error)
 	return libraryUIDs, nil
 }
 
-func exportLibraryElement(uid string, basePath string, count *int, errors *[]string) error {
+func exportLibraryElement(uid string, basePath string, count *int, errors *[]string, orgID int) error {
 	url := fmt.Sprintf("%s/api/library-elements/%s", config.GrafanaURL, uid)
-	library, err := fetchAPI[LibraryElementWithMeta](url)
+	library, err := fetchAPI[LibraryElementWithMeta](url, orgID)
 
 	if err != nil {
 		return fmt.Errorf("failed to fetch library element %s: %v", uid, err)
@@ -760,7 +855,7 @@ func exportLibraryElement(uid string, basePath string, count *int, errors *[]str
 		folderName, ok := folderCache[library.Result.FolderUID]
 		if !ok {
 			folderURL := fmt.Sprintf("%s/api/folders/%s", config.GrafanaURL, library.Result.FolderUID)
-			folder, err := fetchAPI[Folder](folderURL)
+			folder, err := fetchAPI[Folder](folderURL, orgID)
 			if err != nil {
 				folderName = "Unknown_" + library.Result.FolderUID
 			} else {
@@ -845,7 +940,7 @@ func safePath(basePath string, unsafePath string) (string, error) {
 	return absJoined, nil
 }
 
-func fetchAPI[T any](url string) (T, error) {
+func fetchAPI[T any](url string, orgID ...int) (T, error) {
 	var result T
 
 	client := &http.Client{}
@@ -860,7 +955,10 @@ func fetchAPI[T any](url string) (T, error) {
 		return result, err
 	}
 
-	req.Header.Add("Authorization", "Bearer "+config.GrafanaAPIKey)
+	config.setAuth(req)
+	if len(orgID) > 0 && orgID[0] > 0 {
+		req.Header.Add("X-Grafana-Org-Id", strconv.Itoa(orgID[0]))
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -880,7 +978,7 @@ func fetchAPI[T any](url string) (T, error) {
 	return result, nil
 }
 
-func fetchAPIRaw(url string, target interface{}) error {
+func fetchAPIRaw(url string, target interface{}, orgID ...int) error {
 	client := &http.Client{}
 	if config.SkipTLSVerify {
 		client.Transport = &http.Transport{
@@ -906,7 +1004,10 @@ func fetchAPIRaw(url string, target interface{}) error {
 			continue
 		}
 
-		req.Header.Add("Authorization", "Bearer "+config.GrafanaAPIKey)
+		config.setAuth(req)
+		if len(orgID) > 0 && orgID[0] > 0 {
+			req.Header.Add("X-Grafana-Org-Id", strconv.Itoa(orgID[0]))
+		}
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -980,7 +1081,7 @@ func extractVersionNumber(dashboard map[string]interface{}) int {
 	return 0
 }
 
-func fetchDashboardDetails(dashboards []Dashboard) []Dashboard {
+func fetchDashboardDetails(dashboards []Dashboard, orgID int) []Dashboard {
 	// Use a semaphore to limit concurrent requests to avoid overwhelming Grafana
 	semaphore := make(chan struct{}, 10) // Max 10 concurrent requests
 	var results = make([]Dashboard, len(dashboards))
@@ -1001,7 +1102,7 @@ func fetchDashboardDetails(dashboards []Dashboard) []Dashboard {
 			// Fetch detailed dashboard information
 			url := fmt.Sprintf("%s/api/dashboards/uid/%s", config.GrafanaURL, dash.UID)
 			var dashboardDetail DashboardWithMeta
-			err := fetchAPIRaw(url, &dashboardDetail)
+			err := fetchAPIRaw(url, &dashboardDetail, orgID)
 
 			if err != nil {
 				log.Printf("Warning: Failed to fetch details for dashboard %s (%s): %v", dash.Title, dash.UID, err)
@@ -1023,7 +1124,7 @@ func fetchDashboardDetails(dashboards []Dashboard) []Dashboard {
 				if dash.Version > 0 {
 					versionURL := fmt.Sprintf("%s/api/dashboards/uid/%s/versions/%d", config.GrafanaURL, dash.UID, dash.Version)
 					var versionDetail DashboardVersionDetail
-					versionErr := fetchAPIRaw(versionURL, &versionDetail)
+					versionErr := fetchAPIRaw(versionURL, &versionDetail, orgID)
 					if versionErr == nil && versionDetail.Created != "" {
 						dash.Updated = versionDetail.Created
 					} else if versionErr != nil {
