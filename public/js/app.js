@@ -38,6 +38,8 @@ let selectedAlertFolder = 'all';
 let currentSortOrder = 'alphabetical';
 let expandedFolders = new Set();
 let appConfig = { forceEnableZipExport: false };
+let organizations = [];
+let selectedOrgId = 0;
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', initialize);
@@ -60,7 +62,69 @@ function initialize() {
         filterDashboards();
     });
 
+    const orgSelector = document.getElementById('orgSelector');
+    if (orgSelector) {
+        orgSelector.addEventListener('change', function() {
+            selectedOrgId = parseInt(this.value, 10) || 0;
+            reloadAllData();
+        });
+    }
+
     loadConfig();
+    loadOrganizations();
+}
+
+function orgParam(prefix = '?') {
+    return selectedOrgId > 0 ? `${prefix}orgId=${selectedOrgId}` : '';
+}
+
+function orgParamAmp() {
+    return selectedOrgId > 0 ? `&orgId=${selectedOrgId}` : '';
+}
+
+async function loadOrganizations() {
+    try {
+        const response = await fetch('/api/organizations');
+        if (!response.ok) {
+            console.warn('Could not load organizations:', response.statusText);
+            loadFolders();
+            loadDashboards();
+            loadAlerts();
+            return;
+        }
+
+        organizations = await response.json();
+        const wrapper = document.getElementById('orgSelectorWrapper');
+        const selector = document.getElementById('orgSelector');
+
+        if (organizations.length >= 1 && wrapper && selector) {
+            wrapper.style.display = 'flex';
+            selector.innerHTML = organizations.map(org =>
+                `<option value="${org.id}">${org.name}</option>`
+            ).join('');
+            selectedOrgId = organizations[0].id;
+        }
+
+        loadFolders();
+        loadDashboards();
+        loadAlerts();
+    } catch (error) {
+        console.warn('Failed to load organizations:', error.message);
+        loadFolders();
+        loadDashboards();
+        loadAlerts();
+    }
+}
+
+function reloadAllData() {
+    selectedDashboards.clear();
+    selectedAlerts.clear();
+    selectedFolder = 'all';
+    selectedAlertFolder = 'all';
+    searchQuery = '';
+    alertSearchQuery = '';
+    if (searchDashboard) searchDashboard.value = '';
+    if (searchAlerts) searchAlerts.value = '';
     loadFolders();
     loadDashboards();
     loadAlerts();
@@ -70,7 +134,7 @@ function initialize() {
 async function loadDashboards() {
     try {
         showLoading('Loading dashboards...', 'Fetching from API...');
-        const response = await fetch('/api/dashboards');
+        const response = await fetch('/api/dashboards' + orgParam());
         if (!response.ok) throw new Error(`Failed to load dashboards: ${response.statusText}`);
 
         const data = await response.json();
@@ -95,7 +159,7 @@ async function loadDashboards() {
 
 async function loadAlerts() {
     try {
-        const response = await fetch('/api/alerts');
+        const response = await fetch('/api/alerts' + orgParam());
         if (!response.ok) throw new Error(`Failed to load alerts: ${response.statusText}`);
 
         const data = await response.json();
@@ -112,7 +176,7 @@ async function loadAlerts() {
 
 async function loadFolders() {
     try {
-        const response = await fetch('/api/folders');
+        const response = await fetch('/api/folders' + orgParam());
         if (!response.ok) throw new Error(`Failed to load folders: ${response.statusText}`);
 
         const data = await response.json();
@@ -609,7 +673,8 @@ async function exportSelectedDashboards() {
                 dashboardUIDs: Array.from(selectedDashboards),
                 alertUIDs: Array.from(selectedAlerts),
                 includeAlerts: includeAlertsCheck.checked,
-                exportAsZip: exportAsZipCheck.checked
+                exportAsZip: exportAsZipCheck.checked,
+                orgId: selectedOrgId
             })
         });
 

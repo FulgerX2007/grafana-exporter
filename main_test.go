@@ -134,7 +134,7 @@ func TestExportLibraryElement(t *testing.T) {
 
 	var count int
 	var errors []string
-	err = exportLibraryElement("test-uid", tempDir, &count, &errors)
+	err = exportLibraryElement("test-uid", tempDir, &count, &errors, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 	assert.Empty(t, errors)
@@ -278,7 +278,7 @@ func TestFetchDashboardDetailsWithVersion(t *testing.T) {
 		{ID: 1, UID: "test-uid-1", Title: "Test Dashboard"},
 	}
 
-	result := fetchDashboardDetails(dashboards)
+	result := fetchDashboardDetails(dashboards, 0)
 	assert.Len(t, result, 1)
 	assert.Equal(t, 7, result[0].Version)
 	assert.Equal(t, "2026-03-15T10:30:00Z", result[0].Updated)
@@ -320,7 +320,7 @@ func TestFetchDashboardDetailsVersionAPIFallback(t *testing.T) {
 		{ID: 2, UID: "test-uid-2", Title: "Test Dashboard 2"},
 	}
 
-	result := fetchDashboardDetails(dashboards)
+	result := fetchDashboardDetails(dashboards, 0)
 	assert.Len(t, result, 1)
 	assert.Equal(t, 3, result[0].Version)
 	// Should fall back to the updated field from dashboard detail
@@ -978,7 +978,7 @@ func TestExportLibraryElementWithFolder(t *testing.T) {
 
 	var count int
 	var errors []string
-	err = exportLibraryElement("lib-with-folder", tempDir, &count, &errors)
+	err = exportLibraryElement("lib-with-folder", tempDir, &count, &errors, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -1026,7 +1026,7 @@ func TestExportLibraryElementCachedFolder(t *testing.T) {
 
 	var count int
 	var errors []string
-	err = exportLibraryElement("lib-cached", tempDir, &count, &errors)
+	err = exportLibraryElement("lib-cached", tempDir, &count, &errors, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 }

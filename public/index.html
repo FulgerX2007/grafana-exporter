@@ -182,6 +182,63 @@
             box-shadow: 0 0 0 3px rgba(244, 104, 0, 0.1);
         }
 
+        /* ── Organization Selector ── */
+        .org-selector {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-light);
+            background: linear-gradient(180deg, #F8F9FB 0%, var(--bg-white) 100%);
+        }
+
+        .org-selector-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            margin-right: 10px;
+        }
+
+        .org-selector-label svg {
+            width: 13px;
+            height: 13px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .org-select {
+            width: 100%;
+            padding: 8px 30px 8px 10px;
+            border: 1.5px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: var(--bg-white);
+            cursor: pointer;
+            outline: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 12px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .org-select:hover {
+            border-color: var(--grafana-orange);
+        }
+
+        .org-select:focus {
+            border-color: var(--grafana-orange);
+            box-shadow: 0 0 0 3px rgba(244, 104, 0, 0.08);
+        }
+
         /* ── Folders Panel (Left) ── */
         .folders-panel {
             border-right: 1px solid var(--border-light);
@@ -897,6 +954,13 @@
 
         <!-- Left: Folders -->
         <div class="folders-panel" id="foldersPanel">
+            <div class="org-selector" id="orgSelectorWrapper" style="display:none;">
+                <div class="org-selector-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+                    Organization
+                </div>
+                <select id="orgSelector" class="org-select"></select>
+            </div>
             <div class="panel-title">Folders</div>
             <ul class="folder-tree" id="foldersList"></ul>
         </div>
