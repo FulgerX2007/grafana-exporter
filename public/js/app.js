@@ -72,6 +72,21 @@ function initialize() {
 
     loadConfig();
     loadOrganizations();
+    loadVersion();
+}
+
+async function loadVersion() {
+    try {
+        const response = await fetch('/api/version');
+        if (!response.ok) return;
+        const data = await response.json();
+        const el = document.getElementById('appVersion');
+        if (el && data.version) {
+            el.textContent = 'Grafana Exporter v' + data.version;
+        }
+    } catch (error) {
+        console.warn('Failed to load version:', error.message);
+    }
 }
 
 function orgParam(prefix = '?') {
