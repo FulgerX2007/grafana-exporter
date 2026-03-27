@@ -10,28 +10,29 @@
 ![GitHub](https://img.shields.io/github/forks/fulgerx2007/grafana-exporter?style=social)
 ![GitHub](https://img.shields.io/github/watchers/fulgerx2007/grafana-exporter?style=social)
 
-![logo](images/logo.jpg)
+![logo](images/logo.png)
 
 A Go application with a web UI to export Grafana dashboards and their linked libraries.
 
 ## Features
 
 - Web-based interface for selecting dashboards to export
+- **Multi-organization support** — switch between Grafana organizations from the UI
+- **Dual authentication** — Bearer token (API key) or Basic auth (username/password)
 - Automatically exports linked library panels
 - Preserves folder structure for dashboards and libraries
-- Supports nested folder hierarchies
+- Supports nested folder hierarchies (clicking a folder shows all sub-folder dashboards)
+- Sort dashboards by name or last updated date with version tracking
+- Export as individual JSON files or ZIP archive
+- Alert rules export (modern and legacy Grafana API)
 - Search and filter capabilities
-- Works with Grafana v11.x
-
-### Example
-![Example](images/Screenshot_1.png)
-![Example](images/Screenshot_2.png)
+- Works with Grafana v10.x / v11.x
 
 ## Requirements
 
-- Go 1.18 or higher
+- Go 1.22 or higher
 - Access to a Grafana instance
-- Grafana API key with viewer permissions
+- Grafana API key with viewer permissions, **or** username/password with basic auth enabled
 
 ## Installation
 
@@ -55,16 +56,37 @@ go build
 
 ## Configuration
 
-Create a `.env` file based on the example:
+Create a `.env` file based on `.env.example`:
 
-```
+```bash
+# Grafana connection
 GRAFANA_URL=https://your-grafana-instance
+
+# Authentication (choose one method):
+# Option 1: API key (Bearer token) — single org
 GRAFANA_API_KEY=your-api-key-here
+
+# Option 2: Basic auth (username/password) — supports multi-org switching
+GRAFANA_USER=admin
+GRAFANA_PASSWORD=your-password
+
+# General settings
 SKIP_TLS_VERIFY=true
+GRAFANA_VERSION=11.1
 EXPORT_DIRECTORY=./exported
+SERVER_HOST=127.0.0.1
 SERVER_PORT=8080
-GRAFANA_VERSION=10.0
+FORCE_ENABLE_ZIP_EXPORT=false
 ```
+
+### Authentication Methods
+
+| Method | Env Vars | Multi-Org | Notes |
+|--------|----------|-----------|-------|
+| **API Key** | `GRAFANA_API_KEY` | No | Default. Create via Grafana > Administration > Service accounts |
+| **Basic Auth** | `GRAFANA_USER` + `GRAFANA_PASSWORD` | Yes | Auto-detected when both are set. Requires `[auth.basic] enabled = true` in Grafana config |
+
+When using basic auth, the organization selector appears in the UI allowing you to switch between orgs.
 
 ## Usage
 
@@ -81,9 +103,11 @@ http://localhost:8080
 ```
 
 3. Use the web interface to:
-   - Browse available folders and dashboards
-   - Select dashboards to export
-   - Export dashboards and their linked libraries
+   - Switch between organizations (if using basic auth)
+   - Browse folders and dashboards (clicking a folder includes subfolders)
+   - Sort by name or last updated date
+   - Select dashboards and alert rules to export
+   - Export as JSON files or ZIP archive with linked library panels
 
 ## Creating a Grafana API Key
 

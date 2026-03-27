@@ -25,6 +25,8 @@ import (
 //go:embed public/*
 var publicFS embed.FS
 
+var Version = "dev"
+
 type Config struct {
 	GrafanaURL           string
 	GrafanaAPIKey        string
@@ -164,6 +166,9 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
+	e.GET("/api/version", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{"version": Version})
+	})
 	e.GET("/api/organizations", getOrganizations)
 	e.GET("/api/folders", getFolders)
 	e.GET("/api/dashboards", getDashboards)

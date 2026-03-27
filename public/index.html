@@ -252,7 +252,7 @@
             text-transform: uppercase;
             letter-spacing: 0.06em;
             color: var(--text-secondary);
-            padding: 0 20px 12px;
+            padding: 15px 20px 12px;
         }
 
         .folder-tree {
@@ -853,6 +853,31 @@
             to { opacity: 1; }
         }
 
+        /* ── Footer ── */
+        .app-footer {
+            text-align: center;
+            padding: 16px 32px;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-light);
+            background: var(--bg-white);
+        }
+
+        .app-footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        .app-footer a:hover {
+            color: var(--grafana-orange);
+        }
+
+        .app-footer .footer-sep {
+            margin: 0 8px;
+            color: var(--border-medium);
+        }
+
         /* ── Loading Overlay ── */
         .loading-overlay {
             position: fixed;
@@ -1089,6 +1114,12 @@
     <p class="loading-text" id="loadingText">Processing...</p>
     <p class="loading-debug" id="debugInfo"></p>
 </div>
+
+<footer class="app-footer">
+    <span id="appVersion"></span>
+    <span class="footer-sep">|</span>
+    <a href="https://github.com/FulgerX2007/grafana-exporter" target="_blank" rel="noopener">GitHub</a>
+</footer>
 
 <script src="js/app.js"></script>
 </body>
