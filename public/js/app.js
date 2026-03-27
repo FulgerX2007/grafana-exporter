@@ -516,12 +516,30 @@ function renderAlerts() {
 }
 
 // ── Filtering ──
+function getDescendantFolderIds(folderId) {
+    const ids = new Set([folderId]);
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder) return ids;
+    const queue = [folder.uid];
+    while (queue.length > 0) {
+        const parentUid = queue.shift();
+        for (const f of folders) {
+            if (f.parentUid === parentUid && !ids.has(f.id)) {
+                ids.add(f.id);
+                queue.push(f.uid);
+            }
+        }
+    }
+    return ids;
+}
+
 function filterDashboards() {
     if (selectedFolder === 'all') {
         filteredDashboards = [...dashboards];
     } else {
         const folderId = parseInt(selectedFolder);
-        filteredDashboards = dashboards.filter(d => d.folderId === folderId);
+        const folderIds = getDescendantFolderIds(folderId);
+        filteredDashboards = dashboards.filter(d => folderIds.has(d.folderId));
     }
 
     if (searchQuery) {
@@ -541,7 +559,8 @@ function filterAlerts() {
         filteredAlerts = [...alerts];
     } else {
         const folderId = parseInt(selectedAlertFolder);
-        filteredAlerts = alerts.filter(a => a.folderId === folderId);
+        const folderIds = getDescendantFolderIds(folderId);
+        filteredAlerts = alerts.filter(a => folderIds.has(a.folderId));
     }
 
     if (alertSearchQuery) {
