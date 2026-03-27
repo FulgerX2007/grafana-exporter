@@ -2,6 +2,8 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
+ARG VERSION=dev
+
 # Copy go.mod and go.sum files and download dependencies
 COPY go.mod go.sum* ./
 RUN go mod download
@@ -10,7 +12,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o dashboard-exporter .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-X 'main.Version=${VERSION}'" -o dashboard-exporter .
 
 # Use a smaller image for the final container
 FROM alpine:3.19
